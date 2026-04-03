@@ -44,6 +44,8 @@ jobs:
           directory: modules/
           framework: terraform
           soft_fail: true
+          output_format: cli
+        continue-on-error: true
 
   plan:
     name: "Plan (${{ matrix.cloud }})"
@@ -120,7 +122,7 @@ jobs:
 
       - name: Infracost PR Comment
         if: github.event_name == 'pull_request'
-        uses: infracost/actions/comment@v3
+        uses: infracost/actions/comment@v0.10.1
         with:
           path: /tmp/infracost-${{ matrix.cloud }}.json
           behavior: update
