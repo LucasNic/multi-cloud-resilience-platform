@@ -161,12 +161,32 @@ resource "local_file" "fluentbit_values" {
 
 variable "project_prefix" { type = string }
 variable "environment" { type = string }
-variable "cloud" { type = string; description = "aws or azure" }
-variable "deploy_grafana" { type = bool; default = false }
-variable "grafana_admin_password" { type = string; default = "admin"; sensitive = true }
-variable "aws_region" { type = string; default = "us-east-1" }
-variable "log_analytics_workspace_id" { type = string; default = "" }
-variable "log_analytics_key" { type = string; default = ""; sensitive = true }
+variable "cloud" {
+  type        = string
+  description = "aws or azure"
+}
+variable "deploy_grafana" {
+  type    = bool
+  default = false
+}
+variable "grafana_admin_password" {
+  type      = string
+  default   = "admin"
+  sensitive = true
+}
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+variable "log_analytics_workspace_id" {
+  type    = string
+  default = ""
+}
+variable "log_analytics_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
 
 output "prometheus_rules_path" { value = local_file.prometheus_rules.filename }
 output "prometheus_values_path" { value = local_file.prometheus_values.filename }

@@ -122,11 +122,14 @@ jobs:
             --out-file=/tmp/infracost-${{ matrix.cloud }}.json
 
       - name: Infracost PR Comment
-        if: github.event_name == 'pull_request'
-        uses: infracost/actions/comment@v0.10.1
-        with:
-          path: /tmp/infracost-${{ matrix.cloud }}.json
-          behavior: update
+        if: github.event_name == 'pull_request' && secrets.INFRACOST_API_KEY != ''
+        run: |
+          infracost comment github \
+            --path=/tmp/infracost-${{ matrix.cloud }}.json \
+            --repo=$GITHUB_REPOSITORY \
+            --pull-request=${{ github.event.pull_request.number }} \
+            --github-token=${{ secrets.GITHUB_TOKEN }} \
+            --behavior=update
 
   # Deploy order: OCI first (primary), then GCP (failover), then shared (DNS/DB)
   apply:

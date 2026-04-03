@@ -162,7 +162,10 @@ variable "node_count" {
   type        = number
   default     = 1
 }
-variable "extra_labels" { type = map(string); default = {} }
+variable "extra_labels" {
+  type    = map(string)
+  default = {}
+}
 
 # --- Outputs ---
 
