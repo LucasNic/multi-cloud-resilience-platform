@@ -1,6 +1,7 @@
 name: "Multi-Cloud CI/CD"
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths: ["modules/**", "live/**", "k8s/**"]
