@@ -1,7 +1,7 @@
-# ADR-002: AKS System-Assigned Managed Identity over Service Principal
+# ADR-008: AKS System-Assigned Managed Identity over Service Principal
 
 ## Status
-Accepted
+Superseded by ADR-002 (OKE Workload Identity)
 
 ## Decision
 Use `identity { type = "SystemAssigned" }` for all AKS clusters.

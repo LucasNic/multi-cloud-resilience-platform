@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Replaces ADR-002 (AKS System-Assigned Managed Identity), which was specific to Azure.
+Replaces ADR-008 (AKS System-Assigned Managed Identity), which was specific to Azure.
 
 OCI pods running on OKE need to access OCI services (Object Storage, Vault) without
 storing credentials in the cluster. OCI provides two mechanisms:

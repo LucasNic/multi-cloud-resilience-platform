@@ -6,7 +6,7 @@
 #
 # Stack:
 # - Prometheus (metrics collection + alerting rules)
-# - Grafana (dashboards — optional, can use CloudWatch/Azure Monitor)
+# - Grafana (dashboards — optional, can use OCI Logging Analytics/GCP Cloud Monitoring)
 # - Fluent Bit (log forwarding to cloud-native sinks)
 #
 # This module outputs Helm values. Actual deployment is via ArgoCD.
@@ -57,7 +57,7 @@ resource "local_file" "prometheus_rules" {
               labels = { severity = "critical" }
               annotations = {
                 summary     = "Pod {{ $labels.pod }} is crash-looping"
-                description = "This will degrade the /healthz endpoint and may trigger Route53 failover."
+                description = "This will degrade the /healthz endpoint and may trigger Cloudflare DNS failover."
               }
             },
             {
@@ -66,8 +66,8 @@ resource "local_file" "prometheus_rules" {
               for   = "1m"
               labels = { severity = "critical" }
               annotations = {
-                summary     = "Cannot connect to RDS PostgreSQL"
-                description = "If this cluster is the active one, API requests will fail and Route53 will failover."
+                summary     = "Cannot connect to CockroachDB"
+                description = "If this cluster is the active one, API requests will fail and Cloudflare DNS failover will trigger."
               }
             },
             {
@@ -77,7 +77,7 @@ resource "local_file" "prometheus_rules" {
               labels = { severity = "warning" }
               annotations = {
                 summary = "No pods have cluster-role label"
-                description = "ArgoCD may not have synced the overlay correctly."
+                description = "ArgoCD may not have synced the overlay correctly. Cloudflare DNS failover may not trigger."
               }
             }
           ]
@@ -139,22 +139,23 @@ resource "local_file" "fluentbit_values" {
   filename = "${path.module}/output/fluentbit-values.yaml"
   content  = yamlencode({
     config = {
-      outputs = var.cloud == "aws" ? <<-AWSOUT
+      outputs = var.cloud == "gcp" ? <<-GCPOUT
         [OUTPUT]
-            Name cloudwatch_logs
+            Name stackdriver
             Match *
-            region ${var.aws_region}
-            log_group_name /eks/${var.project_prefix}-${var.environment}/app
-            log_stream_prefix fluentbit-
-            auto_create_group true
-      AWSOUT
-      : <<-AZUREOUT
+            resource global
+            google_service_credentials /var/secrets/google/key.json
+      GCPOUT
+      : <<-OCIOUT
         [OUTPUT]
-            Name azure
+            Name http
             Match *
-            Customer_ID ${var.log_analytics_workspace_id}
-            Shared_Key ${var.log_analytics_key}
-      AZUREOUT
+            host ingestionlogs.${var.oci_region}.oci.oraclecloud.com
+            port 443
+            uri /20200831/actions/acceptLogs
+            format json
+            tls On
+      OCIOUT
     }
   })
 }
@@ -163,7 +164,7 @@ variable "project_prefix" { type = string }
 variable "environment" { type = string }
 variable "cloud" {
   type        = string
-  description = "aws or azure"
+  description = "oci or gcp"
 }
 variable "deploy_grafana" {
   type    = bool
@@ -174,18 +175,9 @@ variable "grafana_admin_password" {
   default   = "admin"
   sensitive = true
 }
-variable "aws_region" {
+variable "oci_region" {
   type    = string
-  default = "us-east-1"
-}
-variable "log_analytics_workspace_id" {
-  type    = string
-  default = ""
-}
-variable "log_analytics_key" {
-  type      = string
-  default   = ""
-  sensitive = true
+  default = "sa-saopaulo-1"
 }
 
 output "prometheus_rules_path" { value = local_file.prometheus_rules.filename }

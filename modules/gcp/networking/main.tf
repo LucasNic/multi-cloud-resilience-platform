@@ -5,15 +5,6 @@
 # All resources are within GCP free tier or minimal cost.
 ###############################################################################
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-}
-
 resource "google_compute_network" "main" {
   name                    = "${var.project_prefix}-${var.environment}-vpc"
   auto_create_subnetworks = false
@@ -83,8 +74,6 @@ variable "region" {
   type    = string
   default = "us-central1"
 }
-
-
 
 # --- Outputs ---
 
