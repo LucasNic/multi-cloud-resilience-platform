@@ -143,7 +143,10 @@ locals {
 # --- Variables ---
 
 variable "project_prefix" { type = string }
-variable "environment" { type = string; default = "dev" }
+variable "environment" {
+  type    = string
+  default = "dev"
+}
 variable "gcp_project_id" { type = string }
 variable "zone" {
   description = "GCP zone for zonal cluster (free control plane)"

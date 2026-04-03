@@ -30,15 +30,13 @@ locals {
 # The bucket must be pre-created (see bootstrap/README.md).
 
 remote_state {
-  backend = "http"
-  generate = { path = "backend.tf"; if_exists = "overwrite_terragrunt" }
+  backend = "local"
+  generate = {
+    path      = "backend.tf"
+    if_exists = "overwrite_terragrunt"
+  }
   config = {
-    address        = "https://objectstorage.${get_env("OCI_REGION", "sa-saopaulo-1")}.oraclecloud.com/n/${get_env("OCI_NAMESPACE")}/b/${local.project_prefix}-tfstate/o/${local.state_key}"
-    update_method  = "PUT"
-    lock_address   = "https://objectstorage.${get_env("OCI_REGION", "sa-saopaulo-1")}.oraclecloud.com/n/${get_env("OCI_NAMESPACE")}/b/${local.project_prefix}-tfstate/o/${local.state_key}.lock"
-    lock_method    = "PUT"
-    unlock_address = "https://objectstorage.${get_env("OCI_REGION", "sa-saopaulo-1")}.oraclecloud.com/n/${get_env("OCI_NAMESPACE")}/b/${local.project_prefix}-tfstate/o/${local.state_key}.lock"
-    unlock_method  = "DELETE"
+    path = "${get_repo_root()}/.tfstate/${local.state_key}"
   }
 }
 

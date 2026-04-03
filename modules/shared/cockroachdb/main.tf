@@ -55,7 +55,10 @@ resource "cockroach_sql_user" "app" {
 # --- Variables ---
 
 variable "project_prefix" { type = string }
-variable "environment" { type = string; default = "dev" }
+variable "environment" {
+  type    = string
+  default = "dev"
+}
 
 variable "cockroach_regions" {
   description = "CockroachDB regions for multi-region resilience"

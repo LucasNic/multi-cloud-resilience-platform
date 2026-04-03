@@ -8,15 +8,6 @@
 # Reference: https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines
 ###############################################################################
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-}
-
 # --- Workload Identity Pool ---
 
 resource "google_iam_workload_identity_pool" "github_actions" {

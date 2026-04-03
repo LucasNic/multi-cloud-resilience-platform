@@ -74,9 +74,17 @@ resource "google_compute_firewall" "allow_health_checks" {
 # --- Variables ---
 
 variable "project_prefix" { type = string }
-variable "environment" { type = string; default = "dev" }
+variable "environment" {
+  type    = string
+  default = "dev"
+}
 variable "gcp_project_id" { type = string }
-variable "region" { type = string; default = "us-central1" }
+variable "region" {
+  type    = string
+  default = "us-central1"
+}
+
+
 
 # --- Outputs ---
 
