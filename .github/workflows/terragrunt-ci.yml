@@ -186,7 +186,20 @@ jobs:
 
       - name: Apply
         working-directory: live/${{ matrix.cloud }}
-        run: terragrunt run-all apply --terragrunt-non-interactive -auto-approve
+        # OCI ARM A1 nodes are prone to "Out of host capacity" errors.
+        # Retry up to 3 times with a 60s pause — capacity usually frees within minutes.
+        run: |
+          for attempt in 1 2 3; do
+            echo "=== Apply attempt $attempt/3 ==="
+            terragrunt run-all apply --terragrunt-non-interactive -auto-approve && break
+            if [ $attempt -lt 3 ]; then
+              echo "Apply failed (attempt $attempt). Waiting 60s before retry..."
+              sleep 60
+            else
+              echo "All 3 attempts failed."
+              exit 1
+            fi
+          done
 
   # ArgoCD sync verification
   verify-sync:

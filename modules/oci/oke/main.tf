@@ -190,9 +190,16 @@ resource "oci_containerengine_node_pool" "main" {
   node_config_details {
     size = var.node_count
 
-    placement_configs {
-      availability_domain = var.availability_domain
-      subnet_id           = oci_core_subnet.nodes.id
+    # Spread across all 3 fault domains within the single SA-SAOPAULO-1 AD.
+    # OCI capacity is allocated per fault domain, so this increases the chance
+    # that at least one node launch succeeds when one FD is out of capacity.
+    dynamic "placement_configs" {
+      for_each = var.fault_domains
+      content {
+        availability_domain = var.availability_domain
+        fault_domains       = [placement_configs.value]
+        subnet_id           = oci_core_subnet.nodes.id
+      }
     }
 
     node_pool_pod_network_option_details {
@@ -254,22 +261,28 @@ variable "availability_domain" {
   type        = string
 }
 
+variable "fault_domains" {
+  description = "Fault domains to spread node pool placement across (increases capacity allocation chances)"
+  type        = list(string)
+  default     = ["FAULT-DOMAIN-1", "FAULT-DOMAIN-2", "FAULT-DOMAIN-3"]
+}
+
 variable "node_count" {
-  description = "Number of ARM A1 nodes (free tier: 1 node with 4 OCPU / 24GB)"
+  description = "Number of ARM A1 nodes (free tier: 2 nodes × 2 OCPU / 12GB each = 4 OCPU / 24GB total)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_ocpus" {
-  description = "OCPUs per node (free tier total: 4)"
+  description = "OCPUs per node (free tier: 2 per node when using 2 nodes)"
   type        = number
-  default     = 4
+  default     = 2
 }
 
 variable "node_memory_gb" {
-  description = "Memory in GB per node (free tier total: 24)"
+  description = "Memory in GB per node (free tier: 12 per node when using 2 nodes)"
   type        = number
-  default     = 24
+  default     = 12
 }
 
 variable "extra_tags" {
