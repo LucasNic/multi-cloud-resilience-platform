@@ -5,7 +5,7 @@
 # GKE (GCP) acts as PASSIVE failover, receiving traffic only when Cloudflare
 # Workers detect AKS degradation via health checks.
 #
-# Compute: default_node_pool (system, Standard_D2ps_v5) + spot node pool (workloads, Standard_D2ps_v5 spot ~70% cheaper)
+# Compute: default_node_pool (system, Standard_D2pds_v5) + spot node pool (workloads, Standard_D2pds_v5 spot ~70% cheaper)
 # Identity: Azure AD Workload Identity (pod-level, equivalent to EKS IRSA)
 #
 # Cost breakdown:
@@ -138,7 +138,7 @@ variable "kubernetes_version" {
 variable "vm_size" {
   description = "VM size for AKS nodes"
   type        = string
-  default     = "Standard_D2ps_v5"
+  default     = "Standard_D2pds_v5"
 }
 variable "node_count" {
   type    = number
