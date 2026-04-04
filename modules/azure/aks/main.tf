@@ -122,7 +122,7 @@ variable "resource_group_name" { type = string }
 variable "aks_subnet_id" { type = string }
 variable "kubernetes_version" {
   type    = string
-  default = "1.30"
+  default = "1.32"
 }
 variable "vm_size" {
   description = "VM size for AKS nodes"
