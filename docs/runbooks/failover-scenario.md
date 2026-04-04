@@ -1,156 +1,148 @@
-# Runbook: EKS Primary Cluster Failure → AKS Failover
+# Runbook: AKS Primary Cluster Failure → GKE Failover
 
 ## Scenario
-The EKS primary cluster becomes unreachable. This document describes what breaks, how it's detected, and how traffic recovers — automatically.
+The AKS primary cluster becomes unreachable. This document describes what breaks, how it's detected, and how traffic recovers — automatically.
 
 ## Architecture Context
 
 ```
 Normal operation:
-  Users → Route53 → EKS (PRIMARY) → RDS PostgreSQL
+  Users → Cloudflare → AKS (PRIMARY) → CockroachDB
 
 During failover:
-  Users → Route53 → AKS (FAILOVER) → RDS PostgreSQL (cross-cloud, +50ms latency)
+  Users → Cloudflare → GKE (FAILOVER) → CockroachDB (same endpoint, no change)
 ```
 
 ## Timeline of Events
 
-### T+0s — EKS Becomes Unhealthy
+### T+0s — AKS Becomes Unhealthy
 
 **What breaks:**
-- EKS API server is unreachable, OR
+- AKS API server is unreachable, OR
 - Application pods crash-loop, OR
-- ALB/NLB health checks fail, OR
+- LoadBalancer health checks fail, OR
 - The `/healthz` endpoint returns non-200
 
 **What does NOT break:**
-- RDS PostgreSQL (independent of EKS, Multi-AZ within AWS)
-- AKS cluster (independent infrastructure in Azure)
+- CockroachDB (independent SaaS, multi-region)
+- GKE cluster (independent infrastructure in GCP)
 - ArgoCD (deployed in both clusters, self-healing)
-- DNS resolution (Route53 is globally distributed)
+- DNS resolution (Cloudflare is globally distributed)
 
-### T+30s — First Health Check Fails
+### T+60s — First Health Check Fails
 
-Route53 health checkers in 3 regions (us-east-1, eu-west-1, ap-southeast-1) each send an HTTPS request to the EKS ingress `/healthz` endpoint. The first check fails.
+Cloudflare Worker (cron: every 1 minute) sends an HTTPS request to the AKS ingress `/healthz` endpoint. The first check fails.
 
 **Detection mechanism:**
 ```
-Route53 Health Check Configuration:
-  Target:     https://<eks-ingress>/healthz
-  Interval:   30 seconds
+Cloudflare Worker Configuration:
+  Target:     https://<aks-ingress>/healthz
+  Interval:   60 seconds (cron trigger)
   Threshold:  3 consecutive failures
-  Regions:    3 (majority must agree)
+  State:      Cloudflare KV (persistent)
 ```
 
-### T+90s — EKS Marked UNHEALTHY
+### T+180s — AKS Marked UNHEALTHY
 
-After 3 consecutive failures (30s × 3 = 90s), Route53 marks the EKS health check as UNHEALTHY.
+After 3 consecutive failures (60s × 3 = 180s), the Worker triggers failover.
 
 **Automated actions triggered:**
-1. CloudWatch alarm `multicloud-dev-failover-triggered` fires
-2. SNS notification sent to on-call (PagerDuty/Slack/email)
-3. Route53 stops returning EKS IP for `api.example.com`
-4. Route53 starts returning AKS IP for `api.example.com`
+1. Worker checks GKE health (must be healthy before failover)
+2. Worker updates DNS A record → GKE ingress IP
+3. Failover state persisted in KV: `{ current_target: "gke", failure_count: 3 }`
+4. `[failover] FAILOVER TRIGGERED: AKS → GKE` logged in Worker
 
-### T+150s (~2.5 min) — Traffic Flowing to AKS
+### T+240s (~4 min) — Traffic Flowing to GKE
 
-DNS propagation completes (TTL=60s). All new DNS lookups resolve to the AKS failover cluster.
+DNS propagation completes (TTL=60s). All new DNS lookups resolve to the GKE failover cluster.
 
 **Expected degradation during failover:**
-- Database latency increases by ~50ms (cross-cloud: Azure → AWS RDS)
+- No database latency increase (both clusters use same CockroachDB endpoint)
 - Some clients may cache the old DNS for up to 60s beyond TTL
-- No data loss (single RDS source of truth, SSL-enforced connections)
+- No data loss (CockroachDB handles replication internally)
 
-**What works immediately on AKS:**
+**What works immediately on GKE:**
 - Same application version (ArgoCD keeps both clusters in sync)
-- Same database (RDS endpoint is accessible from AKS via public endpoint + SG)
+- Same database (CockroachDB endpoint is the same for both clusters)
 - Same secrets (ExternalSecret operator pulls from cloud-native secret stores)
 
-### T+??? — EKS Recovers
+### T+??? — AKS Recovers
 
-When EKS becomes healthy again:
-1. Route53 health checks pass (3 consecutive successes)
-2. Route53 automatically fails BACK to EKS (primary)
-3. CloudWatch alarm returns to OK state
-4. SNS notification confirms recovery
+When AKS becomes healthy again:
+1. Worker health checks pass (immediate on next cron run)
+2. Worker automatically fails BACK to AKS (primary)
+3. `[failover] AKS recovered. Failing back to AKS.` logged
 
 **Manual verification before failback (recommended):**
 ```bash
-# Verify EKS cluster health
-kubectl --context eks get nodes
-kubectl --context eks get pods -n app
+# Verify AKS cluster health
+kubectl --context aks get nodes
+kubectl --context aks get pods -n app
 
 # Verify application health
-curl -v https://<eks-ingress>/healthz
+curl -v https://<aks-ingress>/healthz
 
 # Check ArgoCD sync status
-argocd app get api-eks-primary
+argocd app get api-aks-primary
 ```
 
 ## Key Metrics to Monitor
 
 | Metric | Source | Alert Threshold |
 |---|---|---|
-| Route53 health check status | CloudWatch | < 1 (unhealthy) |
-| API response latency (p99) | Prometheus | > 500ms (normal) / > 800ms (failover) |
-| Error rate (5xx) | Prometheus/ALB | > 1% |
+| Cloudflare Worker execution | Cloudflare Dashboard | Errors > 0 |
+| API response latency (p99) | Prometheus | > 500ms |
+| Error rate (5xx) | Prometheus | > 1% |
 | ArgoCD sync status | ArgoCD metrics | OutOfSync > 5 min |
-| RDS connections | CloudWatch | > 80% of max |
+| CockroachDB connections | CockroachDB Console | > 80% of limit |
 | DNS resolution time | External monitoring | > 100ms |
 
 ## What Can Go Wrong During Failover
 
 | Risk | Mitigation |
 |---|---|
-| AKS also down | Route53 checks AKS health independently; if both fail, returns last known good |
-| RDS unreachable from AKS | Security group pre-configured with AKS outbound IPs; SSL cert pre-validated |
-| ArgoCD out of sync | Automated sync with self-heal; Slack alert on OutOfSync > 5 min |
-| DNS cache stale | TTL=60s minimizes window; CDN purge documented below |
-| Connection pool exhaustion | AKS pods scale via HPA; RDS max_connections sized for dual-cluster load |
+| GKE also down | Worker checks GKE health before failover; if both fail, no DNS change |
+| CockroachDB unreachable | Both clusters use TLS with cert verification; CockroachDB has 99.99% SLA |
+| ArgoCD out of sync | Automated sync with self-heal; alert on OutOfSync > 5 min |
+| DNS cache stale | TTL=60s minimizes window |
+| Spot node evicted during failover | Cloud auto-replaces spot nodes; HPA scales if needed |
 
 ## Manual Intervention Procedures
 
 ### Force Failover (Testing or Planned Maintenance)
 
 ```bash
-# Option 1: Disable EKS health check (triggers failover)
-aws route53 update-health-check \
-  --health-check-id HC_ID \
-  --disabled
+# Option 1: Scale AKS deployment to 0 (app-level failover)
+kubectl --context aks scale deployment/api -n app --replicas=0
 
-# Option 2: Scale EKS deployment to 0 (app-level failover)
-kubectl --context eks scale deployment/api -n app --replicas=0
+# Option 2: Use Cloudflare API to update DNS directly
+curl -X PUT "https://api.cloudflare.com/client/v4/zones/ZONE_ID/dns_records/RECORD_ID" \
+  -H "Authorization: Bearer CF_API_TOKEN" \
+  -d '{"type":"A","name":"api","content":"GKE_IP","proxied":true,"ttl":1}'
 
-# Verify traffic is hitting AKS
-curl -v https://api.example.com/healthz
-# Should return AKS-specific headers or response
+# Verify traffic is hitting GKE
+curl -v https://api.lucasnicoloso.com/api/cluster
+# Should return: {"cluster":"gke","cloud":"gcp"}
 ```
 
 ### Force Failback
 
 ```bash
-# Re-enable EKS health check
-aws route53 update-health-check \
-  --health-check-id HC_ID \
-  --no-disabled
+# Scale AKS deployment back up
+kubectl --context aks scale deployment/api -n app --replicas=2
 
-# Verify EKS is healthy and receiving traffic
-watch -n5 'curl -s https://api.example.com/healthz | jq .cluster_role'
-```
+# Worker will detect AKS recovery and failback automatically
+# Or force via Cloudflare API (same curl as above, with AKS_IP)
 
-### Purge CDN Cache After Failover
-
-```bash
-aws cloudfront create-invalidation \
-  --distribution-id DIST_ID \
-  --paths "/*"
+# Verify AKS is healthy and receiving traffic
+watch -n5 'curl -s https://api.lucasnicoloso.com/api/cluster | jq .cluster'
 ```
 
 ## Post-Incident Review Checklist
 
 - [ ] Root cause identified and documented
-- [ ] Failover timeline matches expected RTO (~2.5 min)
-- [ ] No data loss confirmed (RDS integrity check)
+- [ ] Failover timeline matches expected RTO (~4 min)
+- [ ] No data loss confirmed (CockroachDB consistency check)
 - [ ] ArgoCD sync status verified on both clusters
 - [ ] Health check thresholds reviewed (too sensitive? too slow?)
 - [ ] Runbook updated with lessons learned

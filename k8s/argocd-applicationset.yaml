@@ -5,8 +5,8 @@
 # Git is the source of truth. No manual kubectl apply, ever.
 #
 # Pattern: ApplicationSet with cluster generator
-# - OKE cluster (OCI): uses k8s/overlays/oci  — PRIMARY
-# - GKE cluster (GCP): uses k8s/overlays/gcp  — FAILOVER (passive)
+# - AKS cluster (Azure): uses k8s/overlays/azure — PRIMARY
+# - GKE cluster (GCP):   uses k8s/overlays/gcp   — FAILOVER (passive)
 #
 # Both clusters always run the same version, ensuring failover readiness.
 # ArgoCD surfaces sync drift before the Cloudflare Worker detects it.
@@ -20,9 +20,9 @@ spec:
   generators:
     - list:
         elements:
-          - cluster: oke-primary
-            url: https://OKE_CLUSTER_ENDPOINT
-            overlay: oci
+          - cluster: aks-primary
+            url: https://AKS_CLUSTER_ENDPOINT
+            overlay: azure
             role: primary
           - cluster: gke-failover
             url: https://GKE_CLUSTER_ENDPOINT
@@ -38,7 +38,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/lucasnicoloso/multi-cloud-portfolio.git
+        repoURL: https://github.com/LucasNic/multi-cloud-resilience-platform.git
         targetRevision: main
         path: "k8s/overlays/{{overlay}}"
       destination:
@@ -66,4 +66,4 @@ spec:
         - group: apps
           kind: Deployment
           jsonPointers:
-            - /spec/replicas  # Managed per-overlay (OCI: 2, GCP: 1)
+            - /spec/replicas  # Managed per-overlay (Azure: 2, GCP: 1)

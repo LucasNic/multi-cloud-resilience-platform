@@ -2,14 +2,14 @@
 # Cloudflare DNS + Workers — Automated Failover
 #
 # This module replaces Route53 as the DNS and failover layer.
-# Cloudflare sits OUTSIDE both OCI and GCP, eliminating the single-point-of-failure
+# Cloudflare sits OUTSIDE both Azure and GCP, eliminating the single-point-of-failure
 # that existed when Route53 (an AWS service) was used to trigger failover.
 #
 # Components:
 # 1. DNS zone management (lucasnicoloso.com)
-# 2. DNS records for OKE (primary) and GKE (failover) ingress IPs
-# 3. Cloudflare Worker (JavaScript) that runs every minute, checks OKE health,
-#    and updates the DNS A record if OKE is unhealthy
+# 2. DNS records for AKS (primary) and GKE (failover) ingress IPs
+# 3. Cloudflare Worker (JavaScript) that runs every minute, checks AKS health,
+#    and updates the DNS A record if AKS is unhealthy
 # 4. KV namespace to store failover state between Worker executions
 #
 # Cost: $0 (Workers free tier: 100k req/day, 3 cron triggers)
@@ -29,26 +29,26 @@ data "cloudflare_zone" "main" {
 
 # --- DNS Records ---
 
-# Primary record: OKE ingress IP (Cloudflare proxied — hides origin IP)
+# Primary record: AKS ingress IP (Cloudflare proxied — hides origin IP)
 resource "cloudflare_record" "api_primary" {
   zone_id = data.cloudflare_zone.main.id
   name    = "api"
   type    = "A"
-  content = var.oke_ingress_ip
+  content = var.aks_ingress_ip
   proxied = true  # Cloudflare proxy: DDoS protection + hides origin
   ttl     = 1     # TTL=1 means "automatic" when proxied
-  comment = "OKE primary ingress — managed by Terraform"
+  comment = "AKS primary ingress — managed by Terraform"
 }
 
 # Health endpoint records (not proxied — direct for Worker health checks)
-resource "cloudflare_record" "oke_health" {
+resource "cloudflare_record" "aks_health" {
   zone_id = data.cloudflare_zone.main.id
-  name    = "oke-health"
+  name    = "aks-health"
   type    = "A"
-  content = var.oke_ingress_ip
+  content = var.aks_ingress_ip
   proxied = false
   ttl     = 60
-  comment = "OKE direct health check endpoint — not proxied"
+  comment = "AKS direct health check endpoint — not proxied"
 }
 
 resource "cloudflare_record" "gke_health" {
@@ -66,7 +66,7 @@ resource "cloudflare_record" "root" {
   zone_id = data.cloudflare_zone.main.id
   name    = "@"
   type    = "A"
-  content = var.oke_ingress_ip
+  content = var.aks_ingress_ip
   proxied = true
   ttl     = 1
   comment = "Root domain — primary cluster"
@@ -74,7 +74,7 @@ resource "cloudflare_record" "root" {
 
 # --- KV Namespace: stores failover state between Worker executions ---
 #
-# The Worker writes to KV: { current_target: "oke" | "gke", failure_count: N }
+# The Worker writes to KV: { current_target: "aks" | "gke", failure_count: N }
 # This persists state across the 1-minute cron interval.
 
 resource "cloudflare_workers_kv_namespace" "failover_state" {
@@ -105,8 +105,8 @@ resource "cloudflare_worker_script" "failover" {
   }
 
   plain_text_binding {
-    name = "OKE_IP"
-    text = var.oke_ingress_ip
+    name = "AKS_IP"
+    text = var.aks_ingress_ip
   }
 
   plain_text_binding {
@@ -125,7 +125,7 @@ resource "cloudflare_worker_script" "failover" {
   }
 
   secret_text_binding {
-    name = "CF_API_TOKEN"
+    name = "CF_API_TAKSN"
     text = var.cloudflare_api_token
   }
 }
@@ -162,8 +162,8 @@ variable "project_prefix" {
   type = string
 }
 
-variable "oke_ingress_ip" {
-  description = "OKE primary cluster ingress public IP"
+variable "aks_ingress_ip" {
+  description = "AKS primary cluster ingress public IP"
   type        = string
 }
 

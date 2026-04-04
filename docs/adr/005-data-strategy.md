@@ -30,8 +30,8 @@ Options evaluated:
 ### How It Fits the Failover Architecture
 
 ```
-OCI (primary)          GCP (failover)
-OKE pods               GKE pods
+Azure (primary)          GCP (failover)
+AKS pods               GKE pods
     |                      |
     └──────────┬────────────┘
                |
@@ -39,12 +39,12 @@ OKE pods               GKE pods
     (multi-region: us-east1 + us-central1)
 ```
 
-Both OKE and GKE connect to the same CockroachDB endpoint via TLS.
+Both AKS and GKE connect to the same CockroachDB endpoint via TLS.
 CockroachDB handles replication internally — no split-brain risk.
 
 ### Failover Behavior
 
-- If OCI goes down → GKE takes traffic → connects to same CockroachDB endpoint
+- If Azure goes down → GKE takes traffic → connects to same CockroachDB endpoint
 - If one CockroachDB region goes down → CockroachDB routes to surviving region
 - Application sees a momentary connection blip, then recovery
 

@@ -2,8 +2,8 @@ include "root" {
   path = find_in_parent_folders()
 }
 
-dependency "oke" {
-  config_path = "../../../../oci/sa-saopaulo-1/dev/oke"
+dependency "aks" {
+  config_path = "../../../../azure/eastus/dev/aks"
 }
 
 dependency "gke" {
@@ -18,7 +18,7 @@ inputs = {
   cloudflare_account_id = get_env("CLOUDFLARE_ACCOUNT_ID")
   cloudflare_api_token  = get_env("CLOUDFLARE_API_TOKEN")
   domain_name           = "lucasnicoloso.com"
-  oke_ingress_ip        = dependency.oke.outputs.cluster_endpoint
+  aks_ingress_ip        = dependency.aks.outputs.cluster_endpoint
   gke_ingress_ip        = dependency.gke.outputs.cluster_endpoint
   failure_threshold     = 3
 }

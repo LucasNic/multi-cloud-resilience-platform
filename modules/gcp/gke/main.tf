@@ -83,7 +83,7 @@ resource "google_container_node_pool" "main" {
 
   node_config {
     machine_type = "e2-small"
-    preemptible  = true  # ~R$20/month vs ~R$70/month on-demand
+    spot         = true  # Spot VMs: ~80% cheaper than on-demand, replaces deprecated preemptible
 
     disk_size_gb = 30
     disk_type    = "pd-standard"

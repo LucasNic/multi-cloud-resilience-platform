@@ -5,7 +5,7 @@ Accepted (unchanged from original — tool-agnostic decision)
 
 ## Context
 
-Two independent Kubernetes clusters (OKE + GKE) must run the same application
+Two independent Kubernetes clusters (AKS + GKE) must run the same application
 version at all times. The failover cluster is useless if it's running a different version.
 
 ## Decision
@@ -18,8 +18,8 @@ version at all times. The failover cluster is useless if it's running a differen
 Git repo (source of truth)
   └── k8s/
       ├── base/          → shared manifests
-      ├── overlays/oci/  → OKE patches (Workload Identity, OCI ingress)
-      └── overlays/gcp/  → GKE patches (Workload Identity, GCE ingress)
+      ├── overlays/azure/ → AKS patches (Workload Identity, NGINX ingress)
+      └── overlays/gcp/   → GKE patches (Workload Identity, GCE ingress)
 
 ArgoCD ApplicationSet → watches Git → deploys to both clusters
 ```

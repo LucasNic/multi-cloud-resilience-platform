@@ -1,11 +1,11 @@
 # ADR-004: OIDC Federation for CI/CD Authentication
 
 ## Status
-Accepted
+Accepted (updated: OCI replaced by Azure)
 
 ## Context
 
-GitHub Actions needs to authenticate against OCI and GCP to run Terraform and
+GitHub Actions needs to authenticate against Azure and GCP to run Terraform and
 deploy workloads. Options:
 1. **Stored credentials**: Access keys/service account keys stored as GitHub Secrets
 2. **OIDC federation**: GitHub Actions presents a short-lived JWT, cloud validates it
@@ -16,10 +16,12 @@ Use **OIDC federation** for all cloud authentication in GitHub Actions. Zero sto
 
 ### Implementation per Cloud
 
-**OCI**
-- Create a dynamic group in OCI IAM for the GitHub Actions OIDC provider
-- Create an identity provider in OCI IAM pointing to `token.actions.githubusercontent.com`
+**Azure**
+- Create an Azure AD Application with federated identity credentials
+- Configure the OIDC issuer (`token.actions.githubusercontent.com`) as trusted
+- Bind a Service Principal with Contributor role
 - Restrict to specific repo + branch via subject claim
+- Terraform authenticates via `ARM_USE_OIDC=true` environment variable
 
 **GCP**
 - Create a Workload Identity Pool in GCP IAM
@@ -30,8 +32,8 @@ Use **OIDC federation** for all cloud authentication in GitHub Actions. Zero sto
 ### Subject Restriction
 
 All OIDC configurations restrict to:
-- `repo:lucasnicoloso/multi-cloud-portfolio:ref:refs/heads/main` (apply)
-- `repo:lucasnicoloso/multi-cloud-portfolio:pull_request` (plan only)
+- `repo:LucasNic/multi-cloud-resilience-platform:ref:refs/heads/main` (apply)
+- `repo:LucasNic/multi-cloud-resilience-platform:pull_request` (plan only)
 
 ### Bootstrap Problem
 
@@ -43,5 +45,5 @@ Documented in `bootstrap/README.md`.
 - (+) Zero stored secrets — nothing to leak or rotate
 - (+) Credentials scoped per-job, expire in 1 hour automatically
 - (+) Auditable: cloud logs show exactly which workflow run authenticated
+- (+) Consistent pattern across both Azure and GCP
 - (-) Bootstrap requires one-time local auth with elevated permissions
-- (-) OCI OIDC setup is less documented than AWS/Azure equivalents

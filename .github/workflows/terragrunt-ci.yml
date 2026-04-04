@@ -56,8 +56,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - cloud: oci
-            region: sa-saopaulo-1
+          - cloud: azure
+            region: eastus
           - cloud: gcp
             region: us-central1
           - cloud: shared
@@ -77,26 +77,21 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      # OCI credentials
-      - if: matrix.cloud == 'oci'
-        name: Configure OCI credentials
+      # Azure auth — Workload Identity Federation (OIDC, zero secrets)
+      - if: matrix.cloud == 'azure'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - if: matrix.cloud == 'azure'
+        name: Set Azure env vars
         run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_PRIVATE_KEY_B64 }}" | base64 -d > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-          echo "OCI_REGION=${{ matrix.region }}" >> $GITHUB_ENV
-          echo "OCI_TENANCY_OCID=${{ secrets.OCI_TENANCY_OCID }}" >> $GITHUB_ENV
-          echo "OCI_COMPARTMENT_ID=${{ secrets.OCI_COMPARTMENT_ID }}" >> $GITHUB_ENV
-          echo "OCI_NAMESPACE=${{ secrets.OCI_NAMESPACE }}" >> $GITHUB_ENV
-          echo "OCI_AVAILABILITY_DOMAIN=${{ secrets.OCI_AVAILABILITY_DOMAIN }}" >> $GITHUB_ENV
-          cat > ~/.oci/config <<EOF
-          [DEFAULT]
-          user=${{ secrets.OCI_USER_OCID }}
-          fingerprint=${{ secrets.OCI_FINGERPRINT }}
-          tenancy=${{ secrets.OCI_TENANCY_OCID }}
-          region=${{ matrix.region }}
-          key_file=/home/runner/.oci/oci_api_key.pem
-          EOF
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
 
       - if: matrix.cloud == 'gcp'
         name: Set GCP env vars
@@ -108,14 +103,12 @@ jobs:
           echo "CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" >> $GITHUB_ENV
           echo "CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}" >> $GITHUB_ENV
           echo "COCKROACHDB_PASSWORD=${{ secrets.COCKROACHDB_PASSWORD }}" >> $GITHUB_ENV
-          echo "OCI_REGION=sa-saopaulo-1" >> $GITHUB_ENV
-          echo "OCI_NAMESPACE=${{ secrets.OCI_NAMESPACE }}" >> $GITHUB_ENV
 
       - name: Terragrunt Plan
         working-directory: live/${{ matrix.cloud }}
         run: terragrunt run-all plan --terragrunt-non-interactive 2>&1 | tee plan.txt
 
-  # Deploy order: OCI first (primary), then GCP (failover), then shared (DNS/DB)
+  # Deploy order: Azure first (primary), then GCP (failover), then shared (DNS/DB)
   apply:
     name: "Apply (${{ matrix.cloud }})"
     runs-on: ubuntu-latest
@@ -127,8 +120,8 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - cloud: oci
-            region: sa-saopaulo-1
+          - cloud: azure
+            region: eastus
             order: 1
           - cloud: gcp
             region: us-central1
@@ -151,25 +144,21 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - if: matrix.cloud == 'oci'
-        name: Configure OCI credentials
+      # Azure auth
+      - if: matrix.cloud == 'azure'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - if: matrix.cloud == 'azure'
+        name: Set Azure env vars
         run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_PRIVATE_KEY_B64 }}" | base64 -d > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-          echo "OCI_REGION=${{ matrix.region }}" >> $GITHUB_ENV
-          echo "OCI_TENANCY_OCID=${{ secrets.OCI_TENANCY_OCID }}" >> $GITHUB_ENV
-          echo "OCI_COMPARTMENT_ID=${{ secrets.OCI_COMPARTMENT_ID }}" >> $GITHUB_ENV
-          echo "OCI_NAMESPACE=${{ secrets.OCI_NAMESPACE }}" >> $GITHUB_ENV
-          echo "OCI_AVAILABILITY_DOMAIN=${{ secrets.OCI_AVAILABILITY_DOMAIN }}" >> $GITHUB_ENV
-          cat > ~/.oci/config <<EOF
-          [DEFAULT]
-          user=${{ secrets.OCI_USER_OCID }}
-          fingerprint=${{ secrets.OCI_FINGERPRINT }}
-          tenancy=${{ secrets.OCI_TENANCY_OCID }}
-          region=${{ matrix.region }}
-          key_file=/home/runner/.oci/oci_api_key.pem
-          EOF
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
 
       - if: matrix.cloud == 'gcp'
         name: Set GCP env vars
@@ -181,25 +170,10 @@ jobs:
           echo "CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" >> $GITHUB_ENV
           echo "CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}" >> $GITHUB_ENV
           echo "COCKROACHDB_PASSWORD=${{ secrets.COCKROACHDB_PASSWORD }}" >> $GITHUB_ENV
-          echo "OCI_REGION=sa-saopaulo-1" >> $GITHUB_ENV
-          echo "OCI_NAMESPACE=${{ secrets.OCI_NAMESPACE }}" >> $GITHUB_ENV
 
       - name: Apply
         working-directory: live/${{ matrix.cloud }}
-        # OCI ARM A1 nodes are prone to "Out of host capacity" errors.
-        # Retry up to 3 times with a 60s pause — capacity usually frees within minutes.
-        run: |
-          for attempt in 1 2 3; do
-            echo "=== Apply attempt $attempt/3 ==="
-            terragrunt run-all apply --terragrunt-non-interactive -auto-approve && break
-            if [ $attempt -lt 3 ]; then
-              echo "Apply failed (attempt $attempt). Waiting 60s before retry..."
-              sleep 60
-            else
-              echo "All 3 attempts failed."
-              exit 1
-            fi
-          done
+        run: terragrunt run-all apply --terragrunt-non-interactive -auto-approve
 
   # ArgoCD sync verification
   verify-sync:
@@ -211,6 +185,6 @@ jobs:
       - name: Check ArgoCD sync status
         run: |
           echo "Verifying both clusters are in sync..."
-          echo "OKE: argocd app get api-oke-primary"
+          echo "AKS: argocd app get api-aks-primary"
           echo "GKE: argocd app get api-gke-failover"
           echo "In production, this step uses argocd CLI with OIDC auth"

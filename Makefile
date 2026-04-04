@@ -1,12 +1,12 @@
 .PHONY: help plan apply destroy fmt lint security cost clean
 
-CLOUD ?= aws
+CLOUD ?= azure
 ENV ?= dev
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-plan: ## Terragrunt plan (CLOUD=aws|azure)
+plan: ## Terragrunt plan (CLOUD=azure|gcp|shared)
 	cd live/$(CLOUD) && terragrunt run-all plan --terragrunt-non-interactive
 
 apply: ## Terragrunt apply
@@ -15,7 +15,7 @@ apply: ## Terragrunt apply
 destroy: ## Terragrunt destroy
 	cd live/$(CLOUD) && terragrunt run-all destroy --terragrunt-non-interactive
 
-plan-all: ## Plan both clouds
+plan-all: ## Plan all clouds
 	cd live && terragrunt run-all plan --terragrunt-non-interactive
 
 fmt: ## Format Terraform
@@ -32,15 +32,15 @@ cost: ## Infracost estimate
 
 ci-local: fmt lint security ## Full local CI
 
-plan-eks: ## Plan EKS only
-	$(MAKE) plan CLOUD=aws
-
 plan-aks: ## Plan AKS only
 	$(MAKE) plan CLOUD=azure
 
-failover-test: ## Simulate failover (disable EKS health check)
-	@echo "Disabling EKS health check to trigger Route53 failover..."
-	@echo "aws route53 update-health-check --health-check-id HC_ID --disabled"
+plan-gke: ## Plan GKE only
+	$(MAKE) plan CLOUD=gcp
+
+failover-test: ## Simulate failover (scale AKS to 0)
+	@echo "Scaling AKS deployment to 0 to trigger Cloudflare Worker failover..."
+	@echo "kubectl --context aks scale deployment/api -n app --replicas=0"
 
 clean: ## Remove caches
 	find . -type d -name ".terragrunt-cache" -exec rm -rf {} + 2>/dev/null || true

@@ -2,7 +2,7 @@
 # Base Kubernetes manifests (Kustomize)
 #
 # These are deployed to BOTH clusters via ArgoCD.
-# Overlays in k8s/overlays/{oci,gcp} patch cloud-specific values.
+# Overlays in k8s/overlays/{azure,gcp} patch cloud-specific values.
 ###############################################################################
 ---
 apiVersion: apps/v1
@@ -117,7 +117,7 @@ kind: ServiceAccount
 metadata:
   name: api
   annotations:
-    # OCI: Workload Identity annotation (patched in oci overlay)
+    # Azure: Workload Identity annotation (patched in azure overlay)
     # GCP: Workload Identity annotation (patched in gcp overlay)
     iam-role: "placeholder"
 ---

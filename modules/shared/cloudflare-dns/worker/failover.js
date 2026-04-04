@@ -2,13 +2,13 @@
  * Cloudflare Worker — Automated DNS Failover
  *
  * Runs every minute via cron trigger.
- * Checks OKE primary cluster health. On consecutive failures, updates
+ * Checks AKS primary cluster health. On consecutive failures, updates
  * the DNS A record to point to GKE failover cluster.
- * Automatically fails back when OKE recovers.
+ * Automatically fails back when AKS recovers.
  *
  * State is persisted in KV between executions:
- * - current_target: "oke" | "gke"
- * - failure_count: number of consecutive OKE failures
+ * - current_target: "aks" | "gke"
+ * - failure_count: number of consecutive AKS failures
  * - last_failover_at: ISO timestamp of last failover event
  *
  * Trade-off (ADR-007):
@@ -32,15 +32,15 @@ async function runFailoverCheck(env) {
   const state = await loadState(env);
   console.log(`[failover] current_target=${state.current_target} failure_count=${state.failure_count}`);
 
-  const okeHealthy = await checkHealth(env.OKE_IP, env.HEALTH_PATH);
-  console.log(`[failover] OKE health check: ${okeHealthy ? "PASS" : "FAIL"}`);
+  const okeHealthy = await checkHealth(env.AKS_IP, env.HEALTH_PATH);
+  console.log(`[failover] AKS health check: ${okeHealthy ? "PASS" : "FAIL"}`);
 
   if (okeHealthy) {
     if (state.current_target === "gke") {
-      // OKE recovered — fail back
-      console.log("[failover] OKE recovered. Failing back to OKE.");
-      await updateDnsRecord(env, env.OKE_IP);
-      await saveState(env, { current_target: "oke", failure_count: 0, last_failover_at: state.last_failover_at });
+      // AKS recovered — fail back
+      console.log("[failover] AKS recovered. Failing back to AKS.");
+      await updateDnsRecord(env, env.AKS_IP);
+      await saveState(env, { current_target: "aks", failure_count: 0, last_failover_at: state.last_failover_at });
     } else {
       // Normal operation — reset failure counter
       await saveState(env, { ...state, failure_count: 0 });
@@ -48,12 +48,12 @@ async function runFailoverCheck(env) {
     return;
   }
 
-  // OKE is unhealthy
+  // AKS is unhealthy
   const newCount = state.failure_count + 1;
   const threshold = parseInt(env.FAILURE_THRESHOLD, 10);
-  console.log(`[failover] OKE failure ${newCount}/${threshold}`);
+  console.log(`[failover] AKS failure ${newCount}/${threshold}`);
 
-  if (newCount >= threshold && state.current_target === "oke") {
+  if (newCount >= threshold && state.current_target === "aks") {
     // Threshold reached — trigger failover to GKE
     const gkeHealthy = await checkHealth(env.GKE_IP, env.HEALTH_PATH);
     if (!gkeHealthy) {
@@ -62,7 +62,7 @@ async function runFailoverCheck(env) {
       return;
     }
 
-    console.log("[failover] FAILOVER TRIGGERED: OKE → GKE");
+    console.log("[failover] FAILOVER TRIGGERED: AKS → GKE");
     await updateDnsRecord(env, env.GKE_IP);
     await saveState(env, {
       current_target: "gke",
@@ -101,7 +101,7 @@ async function updateDnsRecord(env, targetIp) {
     `${CLOUDFLARE_API}/zones/${env.ZONE_ID}/dns_records?type=A&name=${env.RECORD_NAME}`,
     {
       headers: {
-        Authorization: `Bearer ${env.CF_API_TOKEN}`,
+        Authorization: `Bearer ${env.CF_API_TAKSN}`,
         "Content-Type": "application/json",
       },
     }
@@ -121,7 +121,7 @@ async function updateDnsRecord(env, targetIp) {
     {
       method: "PUT",
       headers: {
-        Authorization: `Bearer ${env.CF_API_TOKEN}`,
+        Authorization: `Bearer ${env.CF_API_TAKSN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -148,7 +148,7 @@ async function updateDnsRecord(env, targetIp) {
 async function loadState(env) {
   const raw = await env.FAILOVER_STATE.get("state");
   if (!raw) {
-    return { current_target: "oke", failure_count: 0, last_failover_at: null };
+    return { current_target: "aks", failure_count: 0, last_failover_at: null };
   }
   return JSON.parse(raw);
 }

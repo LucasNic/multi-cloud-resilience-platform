@@ -5,11 +5,11 @@ Accepted
 
 ## Context
 
-OCI (primary) and GCP (failover) are independent clouds with no native private
+Azure (primary) and GCP (failover) are independent clouds with no native private
 interconnect. Both clusters need to reach CockroachDB Serverless (external SaaS).
 
 Options considered:
-1. **Private interconnect** (OCI FastConnect + GCP Interconnect): $35-75/month each
+1. **Private interconnect** (Azure ExpressRoute + GCP Interconnect): $35-75/month each
 2. **VPN tunnels** between clouds: operational complexity, ~$10-20/month
 3. **Public endpoints + TLS + IP restriction**: zero cost, simple
 
@@ -24,11 +24,11 @@ All cross-cloud communication uses **HTTPS over public internet** with:
 
 | From | To | Protocol | Auth |
 |---|---|---|---|
-| OKE pods | CockroachDB Serverless | PostgreSQL/TLS | DB credentials via K8s Secret |
+| AKS pods | CockroachDB Serverless | PostgreSQL/TLS | DB credentials via K8s Secret |
 | GKE pods | CockroachDB Serverless | PostgreSQL/TLS | DB credentials via K8s Secret |
-| Cloudflare Worker | OKE ingress `/healthz` | HTTPS | None (public endpoint) |
+| Cloudflare Worker | AKS ingress `/healthz` | HTTPS | None (public endpoint) |
 | Cloudflare Worker | GKE ingress `/healthz` | HTTPS | None (public endpoint) |
-| GitHub Actions | OCI API | HTTPS | OIDC token |
+| GitHub Actions | Azure API | HTTPS | OIDC token |
 | GitHub Actions | GCP API | HTTPS | OIDC token |
 
 ## Trade-offs

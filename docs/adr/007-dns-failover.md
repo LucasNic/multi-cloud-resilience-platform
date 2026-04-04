@@ -21,15 +21,15 @@ The DNS layer must be **outside both clouds** to be a reliable failover trigger.
 ### How It Works
 
 1. A Cloudflare Worker runs every 60 seconds (cron trigger)
-2. Worker checks `https://api.lucasnicoloso.com/healthz` → OKE ingress
+2. Worker checks `https://api.lucasnicoloso.com/healthz` → AKS ingress
 3. If check fails 3 consecutive times → Worker updates the DNS A record to GKE IP
-4. When OKE recovers and passes 3 checks → Worker fails back to OKE
+4. When AKS recovers and passes 3 checks → Worker fails back to AKS
 
 ```
 Cloudflare (neutral)
   └── Worker (cron: every 1 min)
-        ├── GET https://oci-ingress/healthz
-        │     healthy → DNS = OKE IP (no change)
+        ├── GET https://aks-ingress/healthz
+        │     healthy → DNS = AKS IP (no change)
         │     unhealthy ×3 → DNS A record → GKE IP
         └── GET https://gke-ingress/healthz
               monitors failover cluster availability
@@ -57,7 +57,7 @@ This is acceptable for a portfolio workload. Enterprise solution: Cloudflare Loa
 
 ### Why Cloudflare (Not Another DNS Provider)
 
-- **Outside both clouds**: Cloudflare has no dependency on OCI or GCP
+- **Outside both clouds**: Cloudflare has no dependency on Azure or GCP
 - **Terraform provider**: `cloudflare` provider manages DNS + Workers declaratively
 - **Free tier**: DNS, Workers, and cron are all free at this scale
 - **Proxy mode**: Cloudflare proxies traffic, hiding origin IPs from public internet

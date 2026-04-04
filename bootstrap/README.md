@@ -8,35 +8,33 @@ Bootstrap is a one-time process. After it's done, all future changes go through 
 
 ## Overview
 
-The pipeline authenticates against OCI and GCP via OIDC (no stored keys).
+The pipeline authenticates against Azure and GCP via OIDC (no stored keys).
 But to *create* the OIDC resources, you need to authenticate locally first — this is the bootstrap chicken-and-egg problem.
 
 **Order:**
 1. Collect credentials from each platform
 2. Configure GitHub Secrets
-3. Run bootstrap apply locally (OCI + GCP OIDC modules)
+3. Run bootstrap apply locally (Azure + GCP OIDC modules)
 4. From this point on, CI/CD handles everything
 
 ---
 
-## Step 1 — OCI credentials
+## Step 1 — Azure credentials
 
-### 1.1 — Install OCI CLI
+### 1.1 — Install Azure CLI
 
 ```bash
-bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)"
-oci setup config  # follow the prompts
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+az login
 ```
 
 ### 1.2 — Collect the values
 
-| Secret | Where to find |
+| Value | Where to find |
 |---|---|
-| `OCI_TENANCY_OCID` | OCI Console → top-right menu → Tenancy → OCID (copy) |
-| `OCI_COMPARTMENT_ID` | OCI Console → Identity & Security → Compartments → your compartment → OCID |
-| `OCI_NAMESPACE` | OCI Console → Storage → Object Storage → Namespace (top of page) |
-| `OCI_AVAILABILITY_DOMAIN` | OCI Console → your region → Compute → Instances → Availability Domain names (e.g. `IYfK:SA-SAOPAULO-1-AD-1`) |
-| `OCI_ARM_IMAGE_ID` | OCI Console → Compute → Images → Platform Images → filter by "aarch64" or "ARM" → Oracle Linux 8 → OCID |
+| `AZURE_SUBSCRIPTION_ID` | `az account show --query id -o tsv` |
+| `AZURE_TENANT_ID` | `az account show --query tenantId -o tsv` |
+| `AZURE_CLIENT_ID` | Output of `live/azure/eastus/dev/oidc-github` after bootstrap apply |
 
 ---
 
@@ -45,7 +43,6 @@ oci setup config  # follow the prompts
 ### 2.1 — Install gcloud CLI
 
 ```bash
-# Linux
 curl https://sdk.cloud.google.com | bash
 exec -l $SHELL
 gcloud init
@@ -113,18 +110,15 @@ Add all secrets from the table below:
 
 | Secret | Source |
 |---|---|
-| `OCI_TENANCY_OCID` | Step 1.2 |
-| `OCI_COMPARTMENT_ID` | Step 1.2 |
-| `OCI_NAMESPACE` | Step 1.2 |
-| `OCI_AVAILABILITY_DOMAIN` | Step 1.2 |
-| `OCI_ARM_IMAGE_ID` | Step 1.2 |
+| `AZURE_SUBSCRIPTION_ID` | Step 1.2 |
+| `AZURE_TENANT_ID` | Step 1.2 |
+| `AZURE_CLIENT_ID` | Step 7 (after bootstrap apply) |
 | `GCP_PROJECT_ID` | Step 2.3 |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Step 7 (after bootstrap apply) |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | Step 7 (after bootstrap apply) |
 | `CLOUDFLARE_ACCOUNT_ID` | Step 3 |
 | `CLOUDFLARE_API_TOKEN` | Step 3 |
 | `COCKROACHDB_PASSWORD` | Step 4 |
-| `INFRACOST_API_KEY` | infracost.io → free account → API key |
 
 ---
 
@@ -142,21 +136,15 @@ wget https://github.com/gruntwork-io/terragrunt/releases/download/v0.55.0/terrag
 chmod +x terragrunt_linux_amd64 && sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
 ```
 
-Create the OCI Object Storage bucket for Terraform state:
-
-```bash
-# Replace with your actual namespace and compartment
-oci os bucket create \
-  --name multicloud-tfstate \
-  --compartment-id $OCI_COMPARTMENT_ID \
-  --namespace $OCI_NAMESPACE
-```
-
 Run bootstrap apply:
 
 ```bash
-# OCI OIDC (enables GitHub Actions to authenticate against OCI)
-cd live/oci/sa-saopaulo-1/dev/oidc-github
+# Azure OIDC (enables GitHub Actions to authenticate against Azure)
+cd live/azure/eastus/dev/oidc-github
+terragrunt apply
+
+# Azure networking (required before AKS)
+cd live/azure/eastus/dev/networking
 terragrunt apply
 
 # GCP networking (required before GKE)
@@ -170,17 +158,24 @@ terragrunt apply
 
 ---
 
-## Step 7 — Collect GCP OIDC outputs
+## Step 7 — Collect OIDC outputs
 
-After the GCP OIDC apply completes:
+After the bootstrap applies complete:
 
 ```bash
+# Azure
+cd live/azure/eastus/dev/oidc-github
+terragrunt output client_id        # → AZURE_CLIENT_ID
+terragrunt output tenant_id        # → AZURE_TENANT_ID
+terragrunt output subscription_id  # → AZURE_SUBSCRIPTION_ID
+
+# GCP
 cd live/gcp/us-central1/dev/oidc-github
-terragrunt output workload_identity_provider
-terragrunt output service_account_email
+terragrunt output workload_identity_provider  # → GCP_WORKLOAD_IDENTITY_PROVIDER
+terragrunt output service_account_email       # → GCP_SERVICE_ACCOUNT_EMAIL
 ```
 
-Copy these values and add them as GitHub Secrets (`GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT_EMAIL`).
+Copy these values and add them as GitHub Secrets.
 
 ---
 
@@ -188,7 +183,7 @@ Copy these values and add them as GitHub Secrets (`GCP_WORKLOAD_IDENTITY_PROVIDE
 
 From this point on, the CI/CD pipeline handles everything:
 
-- **Pull Request** → lint + security scan + plan + cost estimate
-- **Merge to main** → apply (OCI → GCP → shared)
+- **Pull Request** → lint + security scan + plan
+- **Merge to main** → apply (Azure → GCP → shared)
 
 No more local applies needed.

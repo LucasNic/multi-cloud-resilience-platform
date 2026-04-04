@@ -6,7 +6,7 @@ resources:
 
 commonLabels:
   cluster-role: primary
-  cloud: oci
+  cloud: azure
 
 patches:
   - path: ingress-patch.yaml

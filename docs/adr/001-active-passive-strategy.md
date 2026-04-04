@@ -1,27 +1,26 @@
-# ADR-001: Active-Passive Multi-Cloud Strategy (OCI + GCP)
+# ADR-001: Active-Passive Multi-Cloud Strategy (Azure + GCP)
 
 ## Status
-Accepted
+Accepted (updated: OCI replaced by Azure — OCI free tier account activation unreliable)
 
 ## Context
 
 This project requires a multi-cloud resilience architecture that:
 - Survives a full primary cloud outage without human intervention
-- Stays within a ~R$20/month budget
+- Stays within a ~R$65/month budget
 - Demonstrates production-grade patterns in a portfolio context
 
-AWS and Azure were evaluated and discarded due to cost:
-- EKS control plane: ~R$382/month (no free tier for managed Kubernetes)
-- AKS: free control plane but node costs ~R$60/month, no credits available
-- IBM Cloud IKS: free cluster is 30-day trial only, not permanent
-
-OCI and GCP offer the required managed Kubernetes capabilities at near-zero cost.
+Cloud cost evaluation:
+- **AWS EKS**: control plane ~R$55/month — no free tier. Discarded.
+- **OCI OKE**: free tier (ARM A1 Flex), but account activation for paid resources is unreliable. Discarded after multiple failed activation attempts.
+- **Azure AKS**: free control plane + spot B2s node ~R$45/month. Selected as primary.
+- **GCP GKE**: free control plane (zonal) + spot e2-small ~R$15/month. Selected as failover.
 
 ## Decision
 
 **Active-Passive failover** between:
-- **Primary**: OCI (Oracle Cloud Infrastructure) — OKE + ARM A1 Flex
-- **Failover**: GCP (Google Cloud Platform) — GKE + preemptible e2-small
+- **Primary**: Azure — AKS + Standard_B2s spot node (eastus)
+- **Failover**: GCP — GKE + spot e2-small (us-central1)
 
 Failover is triggered and managed by **Cloudflare Workers** at the DNS layer.
 
@@ -37,44 +36,47 @@ Active-Passive was chosen because:
 - Failover can be **demonstrated live** in an interview
 - Data consistency is handled by CockroachDB (multi-region, not multi-primary writes)
 
-## Why OCI as Primary
+## Why Azure as Primary
 
-- OKE control plane: free
-- ARM A1 Flex: 4 OCPU + 24GB RAM, always free (not a trial)
-- Most generous free tier compute of any cloud provider
-- Sufficient for real application workloads
+- AKS control plane: free
+- Standard_B2s spot: 2 vCPU + 4GB RAM, ~R$45/month (~70% cheaper than on-demand)
+- Workload Identity Federation: zero stored secrets for CI/CD (consistent with ADR-004)
+- System-Assigned Managed Identity: no service principal secrets to rotate (ADR-008)
+- Tier-1 cloud provider with strong market recognition
 
 ## Why GCP as Failover
 
 - GKE Standard zonal: one free control plane per billing account
-- Preemptible e2-small: ~R$20/month — the only cash cost in the architecture
+- Spot e2-small: ~R$15/month
+- Workload Identity Federation: same OIDC pattern as Azure
 - Tier-1 cloud provider, relevant for portfolio narrative
 
 ## Failover Timeline
 
 | Phase | Duration | Cumulative |
 |---|---|---|
-| Cloudflare Worker health check | ~60s (1 min cron) | 60s |
-| DNS propagation | ~60s (TTL=60) | 120s |
-| **Total RTO** | | **~2 minutes** |
+| Cloudflare Worker detects failure (3 checks × 1min) | ~180s | 180s |
+| DNS propagation (TTL=60s) | ~60s | 240s |
+| **Total RTO** | | **~4 minutes** |
 
 ## Trade-offs
 
 - (+) Clear architectural narrative with demonstrable failover
-- (+) ~2 min RTO, testable on demand
+- (+) ~4 min RTO, testable on demand
 - (+) CockroachDB handles data layer resilience independently
-- (+) Total cost ~R$20/month
-- (-) OCI has less market recognition than AWS
-- (-) GCP preemptible nodes can be reclaimed by Google (mitigated: failover cluster only)
-- (-) Not true HA — there IS a ~2 min outage window during failover
+- (+) Total cost ~R$65/month
+- (-) Spot nodes can be evicted (Azure: 30s notice, GCP: similar). Mitigated: both clouds auto-replace evicted nodes
+- (-) Not true HA — there IS a ~4 min outage window during failover
+- (-) Using spot for primary means occasional brief disruptions during eviction/replacement
 
 ## Cost Breakdown
 
 | Resource | Monthly Cost |
 |---|---|
-| OCI OKE + ARM A1 | R$0 |
+| Azure AKS control plane | R$0 |
+| Azure B2s spot node | ~R$45 |
 | GCP GKE control plane | R$0 |
-| GCP e2-small preemptible | ~R$20 |
+| GCP e2-small spot | ~R$15 |
 | CockroachDB Serverless | R$0 |
 | Cloudflare Workers | R$0 |
-| **Total** | **~R$20/month** |
+| **Total** | **~R$60/month** |

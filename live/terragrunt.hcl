@@ -1,12 +1,12 @@
 ###############################################################################
 # Terragrunt Root Configuration
 #
-# State backend: OCI Object Storage (free tier, replaces S3)
-# Provider generation: OCI and GCP based on path
+# State backend: GCS (Google Cloud Storage)
+# Provider generation: Azure, GCP, and shared based on path
 #
 # Path convention: live/<cloud>/<region>/<environment>/<module>
 # Examples:
-#   live/oci/sa-saopaulo-1/dev/oke
+#   live/azure/eastus/dev/aks
 #   live/gcp/us-central1/dev/gke
 #   live/shared/global/dev/cockroachdb
 #   live/shared/global/dev/cloudflare-dns
@@ -22,12 +22,7 @@ locals {
   state_key       = "${local.cloud}/${local.region}/${local.environment}/${local.module_name}/terraform.tfstate"
 }
 
-# --- Remote State: OCI Object Storage ---
-#
-# OCI Object Storage is free tier (20GB always free).
-# Replaces S3 which would incur cost on an account without free tier.
-#
-# The bucket must be pre-created (see bootstrap/README.md).
+# --- Remote State: GCS ---
 
 remote_state {
   backend = "gcs"
@@ -47,11 +42,11 @@ generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<-PROVIDER
-    %{if local.cloud == "oci"}
-    provider "oci" {
-      region = "${local.region}"
-      # Auth via OIDC in CI/CD (see bootstrap/README.md for local auth setup)
+    %{if local.cloud == "azure"}
+    provider "azurerm" {
+      features {}
     }
+    provider "azuread" {}
     %{endif}
 
     %{if local.cloud == "gcp"}

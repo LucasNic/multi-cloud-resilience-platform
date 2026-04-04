@@ -1,53 +1,14 @@
 # ADR-002: OKE Workload Identity for Pod-Level Access to OCI Services
 
 ## Status
-Accepted
+Superseded — OCI replaced by Azure AKS as primary cloud (OCI free tier account activation unreliable). See ADR-008 for current AKS identity approach.
 
 ## Context
 
-Replaces ADR-008 (AKS System-Assigned Managed Identity), which was specific to Azure.
+This ADR was written when OCI OKE was the primary cluster. The project has since migrated to Azure AKS + GCP GKE.
 
-OCI pods running on OKE need to access OCI services (Object Storage, Vault) without
-storing credentials in the cluster. OCI provides two mechanisms:
-1. Instance Principal — identity bound to the VM node (node-level, not pod-level)
-2. Workload Identity — identity bound to a Kubernetes ServiceAccount (pod-level)
+The OCI Workload Identity approach described here is architecturally sound but no longer applicable to this project.
 
-## Decision
+## Original Decision
 
-Use **OCI Workload Identity** bound to Kubernetes ServiceAccounts.
-
-### How It Works
-
-1. OKE cluster has an OIDC issuer URL
-2. A dynamic group is created in OCI IAM matching the ServiceAccount
-3. Policies grant the dynamic group specific OCI permissions
-4. Pods annotate their ServiceAccount → OCI SDK picks up the token automatically
-
-### Why Not Instance Principal
-
-- Instance Principal grants permissions to the entire node, not individual pods
-- Any pod on the node inherits the permissions — violates least privilege
-- Workload Identity is the OCI equivalent of EKS IRSA and AKS Workload Identity
-
-## Implementation
-
-```hcl
-# OKE cluster must have OIDC enabled
-oidc_discovery_enabled = true
-
-# ServiceAccount annotation
-kubernetes.io/serviceaccount: my-app
-```
-
-OCI IAM dynamic group:
-```
-ALL {resource.type = 'workloadidentity', resource.namespace = 'default'}
-```
-
-## Trade-offs
-
-- (+) Pod-level identity, follows least privilege
-- (+) No secrets to rotate or store
-- (+) OCI destroys the identity when the cluster is deleted
-- (-) Requires OCI IAM policy configuration (one-time bootstrap)
-- (-) Less documentation than AWS IRSA or Azure Workload Identity
+Use **OCI Workload Identity** bound to Kubernetes ServiceAccounts for pod-level OCI IAM.

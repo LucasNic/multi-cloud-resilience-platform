@@ -54,7 +54,7 @@ Example:
 ```json
 {
   "trace_id": "abc-123",
-  "service": "rds",
+  "service": "cockroachdb",
   "action": "query",
   "status": "success",
   "duration_ms": 120,
@@ -68,10 +68,10 @@ Example:
 
 Each service must have a visual representation:
 
-- CDN → CloudFront
-- API → Kubernetes (EKS / AKS)
-- Database → RDS
-- Queue → RabbitMQ
+- CDN → Cloudflare
+- API → Kubernetes (AKS / GKE)
+- Database → CockroachDB
+- Queue → In-memory (simulated)
 - Worker → Kubernetes Pod
 
 ---

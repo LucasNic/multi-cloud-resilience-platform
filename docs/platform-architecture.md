@@ -17,74 +17,83 @@ Focus areas:
 ## Architecture Strategy
 
 - Pattern: Active-Passive failover
-- Primary cloud: AWS
-- Secondary cloud: Azure
-- Failover mechanism: DNS (Route53)
-- RTO: ~2.5 minutes
+- Primary cloud: Azure (AKS)
+- Secondary cloud: GCP (GKE)
+- Failover mechanism: Cloudflare Workers (DNS, outside both clouds)
+- RTO: ~4 minutes
 
 ---
 
 ## Core Components
 
-### AWS (Primary)
+### Azure (Primary)
 
-- EKS (Kubernetes)
-- RDS PostgreSQL (single source of truth)
-- CloudFront (CDN)
-- ALB (Ingress)
-- Route53 (DNS + health checks)
+- AKS (Kubernetes) — free control plane, Standard_B2s spot node
+- System-Assigned Managed Identity (ADR-008)
+- Workload Identity for pods (OIDC issuer)
+- NGINX Ingress (exposed via LoadBalancer)
 
 ---
 
-### Azure (Failover)
+### GCP (Failover)
 
-- AKS (Kubernetes)
-- NGINX Ingress
-- System-Assigned Managed Identity
+- GKE (Kubernetes) — free control plane (zonal), spot e2-small node
+- Workload Identity Federation
+- GCE Ingress (native GCP load balancer)
+
+---
+
+### Cloudflare (DNS + Failover Layer)
+
+- DNS zone management (lucasnicoloso.com)
+- Worker (cron: 1min) checks AKS `/healthz`
+- KV Store persists failover state
+- On 3 consecutive failures → updates DNS A record to GKE IP
 
 ---
 
 ## Data Strategy
 
-- Single database (RDS in AWS)
-- AKS accesses DB via secure cross-cloud connection
+- CockroachDB Serverless (multi-region: us-east1 + us-central1)
+- Both AKS and GKE connect to the same CockroachDB endpoint via TLS
+- No split-brain risk — single logical database
 
 Trade-off:
-- no split-brain risk
-- added latency (~50ms)
+- no data replication to manage
+- added latency (~10-20ms cross-cloud)
 
 ---
 
 ## Failover Flow
 
-1. EKS becomes unhealthy
-2. Route53 health checks fail (3 × 30s)
-3. Route53 marks primary as unhealthy
-4. DNS switches to AKS
-5. Traffic flows to Azure
+1. AKS becomes unhealthy
+2. Cloudflare Worker health checks fail (3 × 60s)
+3. Worker verifies GKE is healthy
+4. Worker updates DNS A record → GKE IP
+5. Traffic flows to GCP (~4 min total RTO)
+6. When AKS recovers, Worker automatically fails back
 
 ---
 
 ## GitOps Model
 
 - Source of truth: GitHub
-- Deployment: ArgoCD
+- Deployment: ArgoCD ApplicationSet
 - Strategy:
-  - ApplicationSet
-  - multi-cluster sync
+  - multi-cluster sync (AKS + GKE)
+  - Kustomize overlays per cloud
 
 ---
 
 ## CI/CD Strategy
 
 - GitHub Actions
-- OIDC authentication (no secrets)
+- OIDC authentication — zero stored secrets (Azure + GCP)
 - Pipeline stages:
   - lint (TFLint)
   - security scan (Checkov)
-  - plan (Terraform/Terragrunt)
-  - cost estimation (Infracost)
-  - apply (manual approval)
+  - plan (Terraform/Terragrunt) — parallel per cloud
+  - apply (manual approval, sequential: Azure → GCP → shared)
 
 ---
 
@@ -96,8 +105,8 @@ Trade-off:
 
 Structure:
 
-- `/modules` → reusable infrastructure
-- `/live` → environment orchestration
+- `/modules` → reusable infrastructure (azure/, gcp/, shared/)
+- `/live` → environment orchestration (azure/eastus/dev, gcp/us-central1/dev, shared/global/dev)
 
 Principles:
 
@@ -110,8 +119,8 @@ Principles:
 ## Networking
 
 - Cross-cloud via public endpoints
-- IP restrictions enforced
-- HTTPS only
+- TLS enforced end-to-end
+- Cloudflare proxy hides origin IPs
 
 Trade-off:
 - zero cost
@@ -121,45 +130,50 @@ Trade-off:
 
 ## Security Model
 
-- OIDC federation (GitHub → AWS/Azure)
-- No stored credentials
-- AKS Managed Identity
-- EKS IRSA
-- Secrets via external providers
+- OIDC federation (GitHub → Azure/GCP) — ADR-004
+- No stored credentials in CI/CD
+- AKS Managed Identity — ADR-008
+- GKE Workload Identity
+- K8s Network Policies
+- Checkov scanning on every PR
 
 ---
 
 ## Observability
 
 - Prometheus (metrics)
-- Fluent Bit (logs)
+- Fluent Bit (logs → OCI Logging / Cloud Logging)
 - Grafana or cloud dashboards
 - Health endpoints:
-  - /healthz
-  - /readyz
-  - /livez
+  - /healthz (external — Cloudflare Worker target)
+  - /readyz (internal — K8s readiness)
+  - /livez (internal — K8s liveness)
 
 ---
 
 ## Cost Strategy
 
-- Low-cost environment design
-- Support for:
-  - ephemeral environments
-  - scheduled destroy
-
-FinOps is part of architecture decisions.
+| Resource | Monthly Cost |
+|---|---|
+| Azure AKS control plane | R$0 |
+| Azure B2s spot node | ~R$45 |
+| GCP GKE control plane | R$0 |
+| GCP e2-small spot | ~R$15 |
+| CockroachDB Serverless | R$0 |
+| Cloudflare Workers | R$0 |
+| **Total** | **~R$60/month** |
 
 ---
 
 ## Key Trade-offs
 
-| Area       | Decision         | Trade-off                  |
-| ---------- | ---------------- | -------------------------- |
-| Failover   | Active-Passive   | downtime during switch     |
-| Data       | Single DB        | cross-cloud latency        |
-| Networking | Public endpoints | higher latency             |
-| CI/CD      | OIDC             | initial complexity         |
+| Area       | Decision              | Trade-off                      |
+| ---------- | --------------------- | ------------------------------ |
+| Failover   | Active-Passive        | ~4 min downtime during switch  |
+| Data       | CockroachDB multi-region | slight cross-cloud latency  |
+| Networking | Public endpoints      | higher latency vs private      |
+| CI/CD      | OIDC federation       | initial bootstrap complexity   |
+| Compute    | Spot instances        | possible eviction (auto-replace) |
 
 ---
 
