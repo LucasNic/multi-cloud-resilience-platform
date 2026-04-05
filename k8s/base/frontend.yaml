@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/lucasnic/frontend:7a23d3f
+          image: ghcr.io/lucasnic/frontend:ee68c6b
           ports:
             - name: http
               containerPort: 80
