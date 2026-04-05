@@ -146,7 +146,6 @@ jobs:
         working-directory: live/${{ matrix.cloud }}
         run: terragrunt run-all plan --terragrunt-non-interactive 2>&1 | tee plan.txt
 
-  # Deploy order: Azure first (primary), then GCP (failover), then shared (DNS/DB)
   apply:
     name: "Apply (${{ matrix.cloud }})"
     runs-on: ubuntu-latest
@@ -154,19 +153,15 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     environment: production
     strategy:
-      fail-fast: true
-      max-parallel: 1
+      fail-fast: false
       matrix:
         include:
           - cloud: azure
             region: eastus
-            order: 1
           - cloud: gcp
             region: us-central1
-            order: 2
           - cloud: shared
             region: global
-            order: 3
     steps:
       - uses: actions/checkout@v4
 
