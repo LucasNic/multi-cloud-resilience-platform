@@ -87,3 +87,10 @@ spec:
                 name: api
                 port:
                   name: http
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: trace-streamer
+                port:
+                  name: http
