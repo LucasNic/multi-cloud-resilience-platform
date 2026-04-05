@@ -28,7 +28,8 @@ inputs = {
   cloudflare_api_token  = get_env("CLOUDFLARE_API_TOKEN")
   domain_name           = "lucasnicoloso.com"
   aks_ingress_ip        = dependency.azure_networking.outputs.aks_ingress_ip
-  gke_ingress_ip        = dependency.gcp_networking.outputs.gke_ingress_ip
+  # Actual nginx LB IP on GKE (static global IP is for GCE ingress, not nginx)
+  gke_ingress_ip        = "34.27.20.121"
   # Actual nginx LoadBalancer IP (dynamic — AKS static IP is in wrong RG)
   app_ingress_ip        = "20.72.144.57"
   # Root domain points to portfolio on Cloudflare Pages
