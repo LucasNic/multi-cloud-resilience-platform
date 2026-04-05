@@ -61,10 +61,16 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.lucasnicoloso.com
+      secretName: frontend-tls
   rules:
-    - http:
+    - host: app.lucasnicoloso.com
+      http:
         paths:
           - path: /
             pathType: Prefix
