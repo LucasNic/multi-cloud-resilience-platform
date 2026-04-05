@@ -66,7 +66,8 @@ export default {
     }
 
     if (url.pathname === "/trigger" && request.method === "POST") {
-      await runFailoverCheck(env);
+      // Instant trigger skips the failure threshold — forces immediate failover check
+      await runFailoverCheck(env, { instant: true });
       const state = await loadState(env);
       return new Response(
         JSON.stringify({ ok: true, state }),
@@ -91,13 +92,15 @@ export default {
   },
 };
 
-async function runFailoverCheck(env) {
+async function runFailoverCheck(env, opts = {}) {
   const state = await loadState(env);
   console.log(`[failover] current_target=${state.current_target} failure_count=${state.failure_count}`);
 
   // Health checks use the non-proxied DNS records (aks-health / gke-health)
-  // with the app hostname as Host header so nginx routes to the API service.
-  const aksHealthy = await checkHealth(`http://${env.AKS_IP}${env.HEALTH_PATH}`, "app.lucasnicoloso.com");
+  // over HTTPS with Host: app.lucasnicoloso.com so nginx routes correctly.
+  // Direct HTTP to the IP returns 308 redirect which doesn't work from Workers.
+  const domain = env.DOMAIN_NAME || "lucasnicoloso.com";
+  const aksHealthy = await checkHealth(`https://aks-health.${domain}${env.HEALTH_PATH}`, `app.${domain}`);
   console.log(`[failover] AKS health check: ${aksHealthy ? "PASS" : "FAIL"}`);
 
   if (aksHealthy) {
@@ -121,8 +124,8 @@ async function runFailoverCheck(env) {
   const threshold = parseInt(env.FAILURE_THRESHOLD, 10);
   console.log(`[failover] AKS failure ${newCount}/${threshold}`);
 
-  if (newCount >= threshold && state.current_target === "aks") {
-    const gkeHealthy = await checkHealth(`http://${env.GKE_IP}${env.HEALTH_PATH}`, "app.lucasnicoloso.com");
+  if ((opts.instant || newCount >= threshold) && state.current_target === "aks") {
+    const gkeHealthy = await checkHealth(`https://gke-health.${domain}${env.HEALTH_PATH}`, `app.${domain}`);
     if (!gkeHealthy) {
       console.warn("[failover] GKE also unhealthy — not failing over.");
       await saveState(env, { ...state, failure_count: newCount });
