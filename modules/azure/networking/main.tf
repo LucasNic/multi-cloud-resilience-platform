@@ -57,6 +57,22 @@ resource "azurerm_subnet_network_security_group_association" "aks" {
   network_security_group_id = azurerm_network_security_group.aks.id
 }
 
+# --- Static Public IP for AKS ingress ---
+# Created here (main RG) so it can be referenced before AKS is deployed.
+# AKS ingress controller uses this via service annotation:
+#   service.beta.kubernetes.io/azure-load-balancer-resource-group: <rg>
+#   spec.loadBalancerIP: <this IP>
+
+resource "azurerm_public_ip" "aks_ingress" {
+  name                = "${var.project_prefix}-${var.environment}-aks-ingress-pip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+
+  tags = local.common_tags
+}
+
 # --- Locals ---
 
 locals {
@@ -96,3 +112,11 @@ output "vnet_id" { value = azurerm_virtual_network.main.id }
 output "aks_subnet_id" { value = azurerm_subnet.aks.id }
 output "aks_subnet_name" { value = azurerm_subnet.aks.name }
 output "location" { value = azurerm_resource_group.main.location }
+output "aks_ingress_ip" {
+  description = "Static public IP for AKS ingress LoadBalancer"
+  value       = azurerm_public_ip.aks_ingress.ip_address
+}
+output "aks_ingress_pip_id" {
+  description = "Resource ID of the AKS ingress public IP"
+  value       = azurerm_public_ip.aks_ingress.id
+}

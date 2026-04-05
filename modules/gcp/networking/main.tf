@@ -46,6 +46,15 @@ resource "google_compute_firewall" "allow_https" {
   target_tags   = ["gke-node"]
 }
 
+# --- Static IP for GKE ingress ---
+# Reserved here so it's known before the ingress controller is deployed.
+# GKE ingress controller uses this via annotation: kubernetes.io/ingress.global-static-ip-name
+
+resource "google_compute_global_address" "gke_ingress" {
+  name    = "${var.project_prefix}-${var.environment}-gke-ingress"
+  project = var.gcp_project_id
+}
+
 # --- Firewall: allow GCP health checks to reach nodes ---
 
 resource "google_compute_firewall" "allow_health_checks" {
@@ -83,3 +92,7 @@ output "gke_subnet_name" { value = google_compute_subnetwork.gke.name }
 output "gke_subnet_id" { value = google_compute_subnetwork.gke.id }
 output "pods_range_name" { value = "gke-pods" }
 output "services_range_name" { value = "gke-services" }
+output "gke_ingress_ip" {
+  description = "Static global IP for GKE ingress"
+  value       = google_compute_global_address.gke_ingress.address
+}
