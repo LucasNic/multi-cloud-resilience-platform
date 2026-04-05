@@ -129,6 +129,11 @@ resource "cloudflare_worker_script" "failover" {
     name = "CF_API_TAKSN"
     text = var.cloudflare_api_token
   }
+
+  secret_text_binding {
+    name = "WORKER_SECRET"
+    text = var.worker_secret
+  }
 }
 
 # --- Worker Cron Trigger: runs every minute ---
@@ -185,6 +190,12 @@ variable "failure_threshold" {
   default     = 3
 }
 
+variable "worker_secret" {
+  description = "Bearer token to authenticate HTTP POST /trigger calls to the Worker"
+  type        = string
+  sensitive   = true
+}
+
 # --- Outputs ---
 
 output "zone_id" {
@@ -201,4 +212,15 @@ output "api_fqdn" {
 
 output "kv_namespace_id" {
   value = cloudflare_workers_kv_namespace.failover_state.id
+}
+
+output "worker_url" {
+  description = "HTTP endpoint of the failover worker (used by backend to trigger instant failover)"
+  value       = "https://${cloudflare_worker_script.failover.name}.${var.cloudflare_account_subdomain}.workers.dev"
+}
+
+variable "cloudflare_account_subdomain" {
+  description = "workers.dev subdomain (e.g. lunicnic for lunicnic.workers.dev)"
+  type        = string
+  default     = "lunicnic"
 }

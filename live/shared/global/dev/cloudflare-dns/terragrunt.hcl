@@ -30,4 +30,5 @@ inputs = {
   aks_ingress_ip        = dependency.azure_networking.outputs.aks_ingress_ip
   gke_ingress_ip        = dependency.gcp_networking.outputs.gke_ingress_ip
   failure_threshold     = 3
+  worker_secret         = get_env("WORKER_SECRET")
 }

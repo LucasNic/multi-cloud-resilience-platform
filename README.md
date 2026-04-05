@@ -263,7 +263,7 @@ make destroy CLOUD=shared && make destroy CLOUD=gcp && make destroy CLOUD=azure
 
 ## About
 
-**Lucas Nicoloso** — Senior DevOps/SRE Engineer, 7+ years in multi-cloud (AWS, Azure, GCP, OCI). Currently managing 13+ products with 50+ Terraform modules. This project demonstrates production-grade resilience patterns, cost-conscious architecture decisions, and infrastructure that keeps running at ~R$60/month.
+**Lucas Nicoloso** — DevOps/SRE Engineer with 10+ years of hands-on experience building and scaling infrastructure for high-traffic platforms across AWS, GCP, Azure, and OCI.
 
 ## License
 

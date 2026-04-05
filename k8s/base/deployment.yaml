@@ -51,6 +51,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['cloud']
+            - name: WORKER_URL
+              value: "https://multicloud-failover-worker.lunicnic.workers.dev"
+            - name: WORKER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: worker-secret
+                  key: secret
           # ---------------------------------------------------------------
           # Health Endpoints — CRITICAL for Cloudflare Worker failover
           #

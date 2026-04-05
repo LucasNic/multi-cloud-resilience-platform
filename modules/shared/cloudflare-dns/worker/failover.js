@@ -1,30 +1,93 @@
 /**
  * Cloudflare Worker — Automated DNS Failover
  *
- * Runs every minute via cron trigger.
- * Checks AKS primary cluster health. On consecutive failures, updates
- * the DNS A record to point to GKE failover cluster.
- * Automatically fails back when AKS recovers.
+ * Two invocation modes:
+ *
+ * 1. CRON (scheduled) — runs every minute as a background health check.
+ *    Checks AKS health, updates DNS if unhealthy.
+ *
+ * 2. HTTP (fetch) — triggered instantly via POST /trigger
+ *    Used by the backend's /api/simulate-down to force immediate failover.
+ *    Requires Authorization: Bearer <WORKER_SECRET> header.
  *
  * State is persisted in KV between executions:
- * - current_target: "aks" | "gke"
- * - failure_count: number of consecutive AKS failures
- * - last_failover_at: ISO timestamp of last failover event
+ *   - current_target: "aks" | "gke"
+ *   - failure_count:  number of consecutive AKS failures
+ *   - last_failover_at: ISO timestamp of last failover event
  *
- * Trade-off (ADR-007):
- * Cron minimum interval is 1 minute → RTO ~4 minutes.
- * Cloudflare Load Balancing ($5/month) provides sub-second detection.
- * This approach is chosen to keep the project at R$0/month.
+ * RTO:
+ *   - Cron: ~4 minutes (1 min detection × 3 threshold + DNS propagation)
+ *   - HTTP trigger: < 5 seconds (immediate health check + DNS update)
  */
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 
 export default {
   /**
-   * Cron handler — triggered every minute by Cloudflare scheduler
+   * Cron handler — triggered every minute by Cloudflare scheduler.
    */
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runFailoverCheck(env));
+  },
+
+  /**
+   * HTTP handler — allows instant failover trigger from the backend.
+   *
+   * POST /trigger
+   *   Authorization: Bearer <WORKER_SECRET>
+   *   Body: { "force_check": true }
+   *
+   * GET /state
+   *   Authorization: Bearer <WORKER_SECRET>
+   *   Returns current failover state as JSON.
+   */
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    // Auth check
+    const authHeader = request.headers.get("Authorization") || "";
+    const token = authHeader.replace("Bearer ", "").trim();
+    if (!env.WORKER_SECRET || token !== env.WORKER_SECRET) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // CORS for frontend direct calls
+    const corsHeaders = {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    };
+
+    if (url.pathname === "/state" && request.method === "GET") {
+      const state = await loadState(env);
+      return new Response(JSON.stringify(state), { headers: corsHeaders });
+    }
+
+    if (url.pathname === "/trigger" && request.method === "POST") {
+      await runFailoverCheck(env);
+      const state = await loadState(env);
+      return new Response(
+        JSON.stringify({ ok: true, state }),
+        { headers: corsHeaders }
+      );
+    }
+
+    if (url.pathname === "/recover" && request.method === "POST") {
+      // Force failback to AKS
+      await updateDnsRecord(env, env.AKS_IP);
+      await saveState(env, { current_target: "aks", failure_count: 0, last_failover_at: null });
+      return new Response(
+        JSON.stringify({ ok: true, message: "forced failback to AKS" }),
+        { headers: corsHeaders }
+      );
+    }
+
+    return new Response(JSON.stringify({ error: "not found" }), {
+      status: 404,
+      headers: corsHeaders,
+    });
   },
 };
 
@@ -32,17 +95,20 @@ async function runFailoverCheck(env) {
   const state = await loadState(env);
   console.log(`[failover] current_target=${state.current_target} failure_count=${state.failure_count}`);
 
-  const okeHealthy = await checkHealth(env.AKS_IP, env.HEALTH_PATH);
-  console.log(`[failover] AKS health check: ${okeHealthy ? "PASS" : "FAIL"}`);
+  const aksHealthy = await checkHealth(env.AKS_IP, env.HEALTH_PATH);
+  console.log(`[failover] AKS health check: ${aksHealthy ? "PASS" : "FAIL"}`);
 
-  if (okeHealthy) {
+  if (aksHealthy) {
     if (state.current_target === "gke") {
       // AKS recovered — fail back
       console.log("[failover] AKS recovered. Failing back to AKS.");
       await updateDnsRecord(env, env.AKS_IP);
-      await saveState(env, { current_target: "aks", failure_count: 0, last_failover_at: state.last_failover_at });
+      await saveState(env, {
+        current_target: "aks",
+        failure_count: 0,
+        last_failover_at: state.last_failover_at,
+      });
     } else {
-      // Normal operation — reset failure counter
       await saveState(env, { ...state, failure_count: 0 });
     }
     return;
@@ -54,10 +120,9 @@ async function runFailoverCheck(env) {
   console.log(`[failover] AKS failure ${newCount}/${threshold}`);
 
   if (newCount >= threshold && state.current_target === "aks") {
-    // Threshold reached — trigger failover to GKE
     const gkeHealthy = await checkHealth(env.GKE_IP, env.HEALTH_PATH);
     if (!gkeHealthy) {
-      console.warn("[failover] GKE also unhealthy — not failing over. Both clusters down.");
+      console.warn("[failover] GKE also unhealthy — not failing over.");
       await saveState(env, { ...state, failure_count: newCount });
       return;
     }
@@ -74,16 +139,12 @@ async function runFailoverCheck(env) {
   }
 }
 
-/**
- * Performs an HTTPS health check against the given IP.
- * Returns true if the endpoint responds with HTTP 200.
- */
 async function checkHealth(ip, path) {
   try {
     const url = `https://${ip}${path}`;
     const response = await fetch(url, {
       method: "GET",
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      signal: AbortSignal.timeout(5000),
     });
     return response.status === 200;
   } catch (err) {
@@ -92,11 +153,7 @@ async function checkHealth(ip, path) {
   }
 }
 
-/**
- * Updates the DNS A record via Cloudflare API.
- */
 async function updateDnsRecord(env, targetIp) {
-  // First, find the record ID
   const listRes = await fetch(
     `${CLOUDFLARE_API}/zones/${env.ZONE_ID}/dns_records?type=A&name=${env.RECORD_NAME}`,
     {
@@ -115,7 +172,6 @@ async function updateDnsRecord(env, targetIp) {
 
   const recordId = listData.result[0].id;
 
-  // Update the record
   const updateRes = await fetch(
     `${CLOUDFLARE_API}/zones/${env.ZONE_ID}/dns_records/${recordId}`,
     {
@@ -142,9 +198,6 @@ async function updateDnsRecord(env, targetIp) {
   }
 }
 
-/**
- * Loads failover state from KV store.
- */
 async function loadState(env) {
   const raw = await env.FAILOVER_STATE.get("state");
   if (!raw) {
@@ -153,9 +206,6 @@ async function loadState(env) {
   return JSON.parse(raw);
 }
 
-/**
- * Persists failover state to KV store.
- */
 async function saveState(env, state) {
   await env.FAILOVER_STATE.put("state", JSON.stringify(state));
 }
