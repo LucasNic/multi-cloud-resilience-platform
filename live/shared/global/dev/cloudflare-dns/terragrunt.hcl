@@ -4,10 +4,19 @@ include "root" {
 
 dependency "azure_networking" {
   config_path = "../../../../azure/eastus/dev/networking"
+  mock_outputs = {
+    aks_ingress_ip    = "0.0.0.0"
+    aks_ingress_pip_id = "/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Network/publicIPAddresses/mock"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
 dependency "gcp_networking" {
   config_path = "../../../../gcp/us-central1/dev/networking"
+  mock_outputs = {
+    gke_ingress_ip = "0.0.0.0"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
 terraform {
