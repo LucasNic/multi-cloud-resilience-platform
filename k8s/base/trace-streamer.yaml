@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: trace-streamer
-          image: ghcr.io/lucasnic/trace-streamer:ee68c6b
+          image: ghcr.io/lucasnic/trace-streamer:db4e02d
           ports:
             - name: grpc
               containerPort: 4317
