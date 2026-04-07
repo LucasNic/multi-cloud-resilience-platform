@@ -65,6 +65,9 @@ resource "google_container_cluster" "main" {
   }
 
   resource_labels = local.common_labels
+
+  # Desabilitar proteção contra deleção para permitir destruição
+  deletion_protection = false
 }
 
 # --- Node Pool: preemptible e2-small ---
