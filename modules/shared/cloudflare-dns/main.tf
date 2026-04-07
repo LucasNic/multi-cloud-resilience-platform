@@ -29,6 +29,12 @@ data "cloudflare_zone" "main" {
 
 # --- DNS Records ---
 
+# ⚠️⚠️⚠️ ATENÇÃO: RECURSOS DESATIVADOS PARA SIMULAÇÃO VISUAL ⚠️⚠️⚠️
+# Os recursos abaixo foram comentados porque a infraestrutura multi-cloud real foi destruída.
+# A demonstração agora é puramente visual, hospedada no Cloudflare Pages.
+# Para restaurar a funcionalidade real, remova os blocos de comentário abaixo.
+
+/*
 # api.lucasnicoloso.com — managed by Worker failover (switches between AKS/GKE)
 resource "cloudflare_record" "api_primary" {
   zone_id = data.cloudflare_zone.main.id
@@ -76,6 +82,7 @@ resource "cloudflare_record" "gke_health" {
   ttl     = 60
   comment = "GKE direct health check endpoint — not proxied"
 }
+*/
 
 # Root domain → portfolio site on Cloudflare Pages (CNAME flattening at root)
 resource "cloudflare_record" "root" {
@@ -89,18 +96,33 @@ resource "cloudflare_record" "root" {
   comment         = "Root domain — portfolio on Cloudflare Pages"
 }
 
+# Multi-Cloud Simulation subdomain → Cloudflare Pages
+resource "cloudflare_record" "mcs" {
+  zone_id         = data.cloudflare_zone.main.id
+  name            = "mcs"
+  type            = "CNAME"
+  content         = "multi-cloud-simulation.pages.dev"
+  proxied         = true
+  ttl             = 1
+  allow_overwrite = true
+  comment         = "Multi-Cloud Simulation — visual demonstration on Cloudflare Pages"
+}
+
 # --- KV Namespace: stores failover state between Worker executions ---
 #
 # The Worker writes to KV: { current_target: "aks" | "gke", failure_count: N }
 # This persists state across the 1-minute cron interval.
 
+/*
 resource "cloudflare_workers_kv_namespace" "failover_state" {
   account_id = var.cloudflare_account_id
   title      = "${var.project_prefix}-failover-state"
 }
+*/
 
 # --- Worker Script ---
 
+/*
 resource "cloudflare_worker_script" "failover" {
   account_id = var.cloudflare_account_id
   name       = "${var.project_prefix}-failover-worker"
@@ -161,6 +183,7 @@ resource "cloudflare_worker_cron_trigger" "failover" {
 
   schedules = ["* * * * *"]  # Every minute — minimum interval on free tier
 }
+*/
 
 # --- Variables ---
 
@@ -231,14 +254,17 @@ output "zone_id" {
   value = data.cloudflare_zone.main.id
 }
 
+/*
 output "worker_name" {
   value = cloudflare_worker_script.failover.name
 }
+*/
 
 output "api_fqdn" {
   value = "api.${var.domain_name}"
 }
 
+/*
 output "kv_namespace_id" {
   value = cloudflare_workers_kv_namespace.failover_state.id
 }
@@ -247,6 +273,7 @@ output "worker_url" {
   description = "HTTP endpoint of the failover worker (used by backend to trigger instant failover)"
   value       = "https://${cloudflare_worker_script.failover.name}.${var.cloudflare_account_subdomain}.workers.dev"
 }
+*/
 
 variable "cloudflare_account_subdomain" {
   description = "workers.dev subdomain (e.g. lunicnic for lunicnic.workers.dev)"
