@@ -1,4 +1,34 @@
-# Multi-Cloud Resilient Platform
+# ⚠️ ATENÇÃO: PROJETO MIGRADO PARA SIMULAÇÃO VISUAL ⚠️
+
+**Este projeto de infraestrutura multi-cloud foi desativado devido a custos inesperados.**
+A arquitetura distribuída entre Azure e GCP está sendo desmontada para evitar cobranças adicionais.
+
+## 🎯 Nova Direção: Demonstração Visual no Cloudflare Pages
+- **Repositório privado**: [`multi-cloud-simulation`](https://github.com/LucasNic/multi-cloud-simulation)
+- **Hospedagem gratuita**: Cloudflare Pages (como lucasnicoloso.com)
+- **Foco**: Interface visual simulando o failover multi-cloud sem custos de infraestrutura
+- **Status**: Apenas frontend estático, sem backends reais em nuvem
+
+## 🛑 Ações Tomadas
+1. **Rollback** do código aplicativo (6 commits) no repositório `multi-cloud-app`
+2. **Comentários de aviso** em todos os arquivos `terragrunt.hcl`
+3. **Repositório privado** criado para a simulação visual
+4. **Documentação atualizada** com este aviso
+
+## 📋 Instruções para Destruir Recursos Existentes
+Se você precisa destruir recursos já provisionados:
+```bash
+cd live/gcp/us-central1/dev/networking && terragrunt destroy
+cd live/gcp/us-central1/dev/gke && terragrunt destroy
+cd live/azure/eastus/dev/networking && terragrunt destroy
+cd live/azure/eastus/dev/aks && terragrunt destroy
+```
+
+**AVISO**: Execute apenas se tiver certeza e credenciais válidas. A destruição é irreversível.
+
+---
+
+# Multi-Cloud Resilient Platform (Arquivo Histórico)
 
 > **TL;DR**: Active-passive multi-cloud failover with AKS/Azure (primary) and GKE/GCP (failover), automated DNS failover via Cloudflare Workers, GitOps deployment with ArgoCD, and OIDC-based CI/CD. RTO: ~4 minutes. Cost: ~R$60/month. Zero stored secrets.
 
