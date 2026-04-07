@@ -96,7 +96,7 @@ resource "cloudflare_record" "root" {
   comment         = "Root domain — portfolio on Cloudflare Pages"
 }
 
-# Multi-Cloud Simulation subdomain → Cloudflare Pages
+# Multi-Cloud Simulation subdomain → Cloudflare Pages (temporarily pointing to main portfolio)
 resource "cloudflare_record" "mcs" {
   zone_id         = data.cloudflare_zone.main.id
   name            = "mcs"
@@ -105,7 +105,7 @@ resource "cloudflare_record" "mcs" {
   proxied         = true
   ttl             = 1
   allow_overwrite = true
-  comment         = "Multi-Cloud Simulation — visual demonstration on Cloudflare Pages"
+  comment         = "Multi-Cloud Simulation — Cloudflare Pages deployment"
 }
 
 # --- KV Namespace: stores failover state between Worker executions ---

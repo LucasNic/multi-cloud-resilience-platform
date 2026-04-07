@@ -1,32 +1,14 @@
-# ⚠️ ATENÇÃO: DEPLOY DESATIVADO PARA EVITAR CUSTOS ⚠️
-# Esta configuração foi desativada para evitar custos inesperados na GCP/Azure.
+# ⚠️ ATENÇÃO: DEPLOY HABILITADO APENAS PARA DNS ⚠️
+# Esta configuração está habilitada apenas para criar/atualizar registros DNS no Cloudflare.
+# Os recursos de infraestrutura multi-cloud (AKS, GKE) permanecem desativados para evitar custos.
 # O projeto multi-cloud agora é apenas uma demonstração visual hospedada no Cloudflare Pages.
-# NÃO execute terragrunt apply - use apenas para referência ou destruição de recursos existentes.
-# Para destruir recursos: terragrunt destroy
-# Repositório da simulação visual: https://github.com/LucasNic/multi-cloud-simulation
+# Execute terragrunt apply apenas para criar os registros DNS necessários.
+# Repositório da simulação visual: https://github.com/LucasNic/multi-cloud-simulation (não existe - usar site principal temporariamente)
 
 include "root" {
   path = find_in_parent_folders()
 }
 
-dependency "azure_networking" {
-  config_path = "../../../../azure/eastus/dev/networking"
-  skip_outputs = true
-  mock_outputs = {
-    aks_ingress_ip    = "0.0.0.0"
-    aks_ingress_pip_id = "/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Network/publicIPAddresses/mock"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
-}
-
-dependency "gcp_networking" {
-  config_path = "../../../../gcp/us-central1/dev/networking"
-  skip_outputs = true
-  mock_outputs = {
-    gke_ingress_ip = "0.0.0.0"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
-}
 
 terraform {
   source = "../../../../../modules/shared/cloudflare-dns"
