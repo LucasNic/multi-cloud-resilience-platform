@@ -120,6 +120,18 @@ resource "cloudflare_record" "ds" {
   comment         = "Deployment Simulation — Cloudflare Pages deployment"
 }
 
+# MediT marketing site subdomain → Cloudflare Pages
+resource "cloudflare_record" "medit" {
+  zone_id         = data.cloudflare_zone.main.id
+  name            = "medit"
+  type            = "CNAME"
+  content         = "medit-lucasnicoloso-com.pages.dev"
+  proxied         = true
+  ttl             = 1
+  allow_overwrite = true
+  comment         = "MediT app marketing site — Cloudflare Pages deployment"
+}
+
 # --- KV Namespace: stores failover state between Worker executions ---
 #
 # The Worker writes to KV: { current_target: "aks" | "gke", failure_count: N }
